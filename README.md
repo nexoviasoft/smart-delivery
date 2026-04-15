@@ -22,8 +22,39 @@ This project uses Next.js Route Handlers for backend APIs, so frontend and backe
 
 1. Copy `.env.example` to `.env.local`
 2. Set your MongoDB URI in `MONGODB_URI`
-3. Run `npm run dev`
-4. Test API: `http://localhost:3000/api/health`
+3. Configure SMTP in `.env.local` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) to send activation emails
+4. Optional (for demo UI): set `NEXT_PUBLIC_DEMO_COMPANY_ID=<companyId>`
+5. Run `npm run dev`
+6. Test API: `http://localhost:3000/api/health`
+
+## Multi-tenant SaaS APIs
+
+All tenant-scoped APIs require header:
+
+- `x-company-id: <companyObjectId>`
+
+Public APIs:
+
+- `GET /api/health`
+- `GET /api/packages`
+- `POST /api/packages`
+- `POST /api/companies` (register tenant, owner, subscription)
+
+Tenant-scoped APIs:
+
+- `GET /api/subscription/me`
+- `GET /api/orders`
+- `POST /api/orders`
+- `GET /api/deliveries`
+- `GET /api/courier-settings`
+- `PUT /api/courier-settings`
+- `POST /api/delivery/send/:id`
+
+Core enforcement in APIs:
+
+- subscription must be active and not expired
+- package feature must be enabled
+- package monthly usage limit must not be exceeded
 
 ### Local image upload endpoint
 
