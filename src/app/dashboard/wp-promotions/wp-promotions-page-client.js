@@ -6,6 +6,7 @@ import Image from "next/image";
 import * as XLSX from "xlsx";
 import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import RichTextEditor from "@/components/rich-text-editor";
 import { normalizePhoneDigits } from "@/lib/wp/phone";
 
 function renderTemplatePreview({ templateText, templateLink, name }) {
@@ -15,6 +16,18 @@ function renderTemplatePreview({ templateText, templateLink, name }) {
   message = message.replaceAll("{{link}}", link);
   if (link && !message.includes(link)) message = `${message}\n\n${link}`;
   return message.trim();
+}
+
+function renderTemplatePreviewHtml(message) {
+  const escaped = String(message || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<u>$1</u>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replaceAll("\n", "<br/>");
 }
 
 function WpPromotionsPageContent() {
@@ -47,6 +60,7 @@ function WpPromotionsPageContent() {
   const [waConnected, setWaConnected] = useState(false);
   const [waQrDataUrl, setWaQrDataUrl] = useState("");
   const [waLastError, setWaLastError] = useState("");
+  const [activeTab, setActiveTab] = useState("connect");
   const [jobState, setJobState] = useState({
     status: "",
     currentIndex: 0,
@@ -422,6 +436,7 @@ function WpPromotionsPageContent() {
     () => renderTemplatePreview({ templateText, templateLink, name: previewRecipient?.name }),
     [templateText, templateLink, previewRecipient?.name]
   );
+  const previewMessageHtml = useMemo(() => renderTemplatePreviewHtml(previewMessage), [previewMessage]);
 
   return (
     <CustomerDashboardShell title="WP Promotions">
@@ -431,37 +446,27 @@ function WpPromotionsPageContent() {
         <p className="text-sm text-zinc-500">Loading WP promotions usage...</p>
       ) : (
         <div className="grid gap-4">
-          <div className="rounded border p-4">
-            <h2 className="text-sm font-semibold text-zinc-700">WhatsApp Web connection</h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Status: {waConnected ? "Connected" : "Not connected (QR needed)"}
-            </p>
-
-            {!waConnected ? (
-              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_240px]">
-                <div>
-                  <p className="text-xs text-zinc-600">
-                    Scan QR once. After connecting, the same session will persist in <code>.wa-session</code>.
-                  </p>
-                  {waLastError ? (
-                    <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{waLastError}</p>
-                  ) : null}
-                </div>
-                {waQrDataUrl ? (
-                  <div className="flex items-center justify-center rounded border bg-white p-2">
-                    <Image
-                      src={waQrDataUrl}
-                      alt="WhatsApp QR"
-                      width={192}
-                      height={192}
-                      className="h-48 w-48"
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">Waiting for QR...</p>
-                )}
-              </div>
-            ) : null}
+          <div className="rounded border p-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("connect")}
+                className={`rounded px-3 py-2 text-sm font-medium ${
+                  activeTab === "connect" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-800"
+                }`}
+              >
+                Connect WP
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("bulk")}
+                className={`rounded px-3 py-2 text-sm font-medium ${
+                  activeTab === "bulk" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-800"
+                }`}
+              >
+                Bulk Send
+              </button>
+            </div>
           </div>
 
           <div className="rounded border p-4">
@@ -484,7 +489,42 @@ function WpPromotionsPageContent() {
             </div>
           </div>
 
-          {showDraftUI ? (
+          {activeTab === "connect" ? (
+            <div className="rounded border p-4">
+              <h2 className="text-sm font-semibold text-zinc-700">WhatsApp Web connection</h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                Status: {waConnected ? "Connected" : "Not connected (QR needed)"}
+              </p>
+
+              {!waConnected ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-[1fr_240px]">
+                  <div>
+                    <p className="text-xs text-zinc-600">
+                      Scan QR once. After connecting, the same session will persist in <code>.wa-session</code>.
+                    </p>
+                    {waLastError ? (
+                      <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{waLastError}</p>
+                    ) : null}
+                  </div>
+                  {waQrDataUrl ? (
+                    <div className="flex items-center justify-center rounded border bg-white p-2">
+                      <Image
+                        src={waQrDataUrl}
+                        alt="WhatsApp QR"
+                        width={192}
+                        height={192}
+                        className="h-48 w-48"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500">Waiting for QR...</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activeTab === "bulk" && showDraftUI ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
               <div className="rounded border p-4">
                 <h2 className="mb-1 text-sm font-semibold text-zinc-700">Recipients</h2>
@@ -534,11 +574,11 @@ function WpPromotionsPageContent() {
                   <div className="mt-3 grid gap-3">
                     <label className="grid gap-1 text-xs text-zinc-600">
                       Message text
-                      <textarea
-                        className="min-h-[120px] w-full rounded border p-2 text-sm"
+                      <RichTextEditor
                         value={templateText}
-                        onChange={(e) => setTemplateText(e.target.value)}
-                        placeholder="Hi {{name}} ..."
+                        onChange={setTemplateText}
+                        outputMode="text"
+                        minHeight={180}
                         disabled={jobState.status === "running" || Boolean(jobId)}
                       />
                     </label>
@@ -654,9 +694,10 @@ function WpPromotionsPageContent() {
               <div className="rounded border p-4">
                 <h2 className="text-sm font-semibold text-zinc-700">Preview</h2>
                 <p className="mt-1 text-xs text-zinc-500">First recipient</p>
-                <div className="mt-3 rounded border bg-white p-3 text-sm whitespace-pre-wrap">
-                  {previewMessage || "-"}
-                </div>
+                <div
+                  className="mt-3 rounded border bg-white p-3 text-sm"
+                  dangerouslySetInnerHTML={{ __html: previewMessageHtml || "-" }}
+                />
                 <div className="mt-4 rounded border bg-zinc-50 p-3">
                   <p className="text-xs font-semibold text-zinc-700">Note</p>
                   <p className="mt-1 text-xs text-zinc-600">
@@ -666,7 +707,7 @@ function WpPromotionsPageContent() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : activeTab === "bulk" ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
               <div className="rounded border p-4">
                 <h2 className="mb-1 text-sm font-semibold text-zinc-700">Upload recipients Excel</h2>
@@ -730,7 +771,7 @@ function WpPromotionsPageContent() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </CustomerDashboardShell>

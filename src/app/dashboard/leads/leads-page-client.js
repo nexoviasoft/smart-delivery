@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LeadsPageClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialCampaignId = searchParams.get("campaignId") || "";
 
@@ -18,9 +21,12 @@ export default function LeadsPageClient() {
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [error, setError] = useState("");
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+  const [emailSending, setEmailSending] = useState(false);
 
   const selectedCampaign = campaigns.find((item) => String(item._id) === String(selectedCampaignId)) || null;
   const selectedLeadSet = useMemo(() => new Set(selectedLeadIds.map(String)), [selectedLeadIds]);
+  const allLeadIds = useMemo(() => leads.map((lead) => String(lead._id)), [leads]);
+  const allSelected = allLeadIds.length > 0 && allLeadIds.every((id) => selectedLeadSet.has(id));
 
   useEffect(() => {
     fetch("/api/campaigns", { headers: getCustomerHeaders() })
@@ -89,6 +95,15 @@ export default function LeadsPageClient() {
     });
   }
 
+  function toggleSelectAllLeads() {
+    if (!leads.length) return;
+    if (allSelected) {
+      setSelectedLeadIds([]);
+      return;
+    }
+    setSelectedLeadIds(leads.map((lead) => lead._id));
+  }
+
   function normalizeKey(value) {
     return String(value || "")
       .trim()
@@ -112,6 +127,12 @@ export default function LeadsPageClient() {
 
   function sanitizePhoneDigits(value) {
     return String(value || "").replace(/[^\d]/g, "");
+  }
+
+  function normalizeEmail(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase();
   }
 
   function handleExportToExcel() {
@@ -157,6 +178,92 @@ export default function LeadsPageClient() {
     XLSX.writeFile(workbook, "wp-recipients.xlsx");
   }
 
+  function handleExportEmailExcel() {
+    setError("");
+
+    if (!selectedCampaignId) {
+      setError("Please select a campaign first.");
+      return;
+    }
+
+    const emailField = (selectedCampaign?.fields || []).find((f) => f.type === "email") || null;
+    const nameField =
+      (selectedCampaign?.fields || []).find((f) => f.type === "text" && /name/i.test(String(f.label || f.key || ""))) ||
+      (selectedCampaign?.fields || []).find((f) => f.type === "text") ||
+      null;
+
+    if (!emailField || !nameField) {
+      setError("Email and Name fields must exist in the selected campaign.");
+      return;
+    }
+
+    const leadSource = selectedLeadIds.length
+      ? leads.filter((l) => selectedLeadSet.has(String(l._id)))
+      : leads;
+
+    const recipients = leadSource
+      .map((lead) => {
+        const email = normalizeEmail(findAnswerByField(lead.answers || lead?.answers, emailField));
+        const name = String(findAnswerByField(lead.answers || lead?.answers, nameField) || "").trim().slice(0, 120);
+        if (!email || !EMAIL_RE.test(email)) return null;
+        return { Name: name, Email: email };
+      })
+      .filter(Boolean);
+
+    if (!recipients.length) {
+      setError("No valid recipients (email missing or invalid).");
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(recipients, { header: ["Name", "Email"] });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Recipients");
+    XLSX.writeFile(workbook, "email-recipients.xlsx");
+  }
+
+  async function handleSendToEmailPromotions() {
+    setError("");
+
+    if (!selectedCampaignId) {
+      setError("Please select a campaign first.");
+      return;
+    }
+
+    if (!selectedLeadIds.length) {
+      setError("Select at least one lead first.");
+      return;
+    }
+
+    const leadIds = selectedLeadIds;
+
+    setEmailSending(true);
+    try {
+      const response = await fetch("/api/email-promotions/draft", {
+        method: "POST",
+        headers: getCustomerHeaders(),
+        body: JSON.stringify({
+          campaignId: selectedCampaignId,
+          leadIds,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(json?.error || "Failed to create email draft");
+        return;
+      }
+      const draftId = json?.data?.draftId;
+      if (!draftId) {
+        setError("draftId missing from response");
+        return;
+      }
+      router.push(`/dashboard/email-promotions?draftId=${draftId}`);
+    } catch {
+      setError("Failed to create email draft");
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
   const columns = useMemo(() => {
     const allKeys = new Set();
     const ordered = [];
@@ -186,20 +293,37 @@ export default function LeadsPageClient() {
 
       <div className="rounded border p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-zinc-600">Campaign</label>
-          <select
-            className="rounded border p-2 text-sm"
-            value={selectedCampaignId}
-            onChange={(event) => setSelectedCampaignId(event.target.value)}
-            disabled={loadingCampaigns}
-          >
-            {!campaigns.length ? <option value="">No campaigns</option> : null}
-            {campaigns.map((campaign) => (
-              <option key={campaign._id} value={campaign._id}>
-                {campaign.name}
-              </option>
-            ))}
-          </select>
+          <label className="text-sm text-zinc-600">Campaign Tabs</label>
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
+            {!campaigns.length ? (
+              <button
+                type="button"
+                disabled
+                className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-sm text-zinc-500"
+              >
+                No campaigns
+              </button>
+            ) : (
+              campaigns.map((campaign) => {
+                const isActive = String(selectedCampaignId) === String(campaign._id);
+                return (
+                  <button
+                    key={campaign._id}
+                    type="button"
+                    onClick={() => setSelectedCampaignId(String(campaign._id))}
+                    disabled={loadingCampaigns}
+                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
+                      isActive
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {campaign.name}
+                  </button>
+                );
+              })
+            )}
+          </div>
           <span className="text-sm text-zinc-500">Total leads: {count}</span>
           <span className="text-sm text-zinc-500">Selected: {selectedLeadIds.length}</span>
         </div>
@@ -212,6 +336,21 @@ export default function LeadsPageClient() {
           >
             Export to Excel (Name+Phone)
           </button>
+          <button
+            type="button"
+            onClick={handleExportEmailExcel}
+            className="rounded border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-60"
+          >
+            Export to Excel (Name+Email)
+          </button>
+          <button
+            type="button"
+            onClick={handleSendToEmailPromotions}
+            disabled={emailSending || loadingLeads}
+            className="rounded bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+          >
+            {emailSending ? "Opening…" : "Send to Email Promotions"}
+          </button>
         </div>
       </div>
 
@@ -223,7 +362,12 @@ export default function LeadsPageClient() {
             <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
                 <tr className="bg-zinc-100 text-left">
-                  <th className="border p-2 w-16">Select</th>
+                  <th className="border p-2 w-16">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAllLeads} disabled={!leads.length} />
+                      All
+                    </label>
+                  </th>
                   <th className="border p-2">Submitted At</th>
                   {columns.map((column) => (
                     <th key={column} className="border p-2">
