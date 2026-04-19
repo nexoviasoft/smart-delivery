@@ -54,7 +54,10 @@ export default function CustomerDashboardShell({ title, children }) {
       <div className="mx-auto grid w-full max-w-7xl gap-6 md:grid-cols-[240px_1fr]">
         <aside className="rounded-xl border bg-white p-4">
           <h2 className="text-lg font-semibold">Customer Dashboard</h2>
-          <p className="mt-1 text-xs text-zinc-500">Logged in as {sessionUser?.name || "User"}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Logged in as {sessionUser?.name || "User"}
+            {sessionUser?.company?.name ? ` · ${sessionUser.company.name}` : ""}
+          </p>
 
           <nav className="mt-4 grid gap-2">
             {NAV_ITEMS.map((item) => {

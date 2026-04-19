@@ -76,13 +76,23 @@ export default function DashboardOverviewPage() {
   const [recentUpdates, setRecentUpdates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tenantCompany, setTenantCompany] = useState(null);
 
   useEffect(() => {
     async function loadSummaryAndUpdates() {
       try {
+        const meResponse = await fetch("/api/auth/me", { credentials: "include" });
+        const meJson = await meResponse.json().catch(() => ({}));
+        if (!meResponse.ok || !meJson?.success) {
+          setError("Login required to load dashboard data.");
+          return;
+        }
+        setTenantCompany(meJson?.data?.company || null);
+
+        const fetchOpts = { headers: getCustomerHeaders(), credentials: "include" };
         const results = await Promise.all(
           SUMMARY_CONFIG.map(async (config) => {
-            const response = await fetch(config.endpoint, { headers: getCustomerHeaders() });
+            const response = await fetch(config.endpoint, fetchOpts);
             const json = await response.json().catch(() => ({}));
             return { config, response, json };
           })
@@ -146,6 +156,11 @@ export default function DashboardOverviewPage() {
         <p className="text-sm text-zinc-500">Loading overview...</p>
       ) : (
         <div className="space-y-5">
+          <p className="text-sm text-zinc-600">
+            {tenantCompany?.name
+              ? `All numbers below are for your company: ${tenantCompany.name}.`
+              : "All numbers below are scoped to your logged-in company account."}
+          </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {SUMMARY_CONFIG.map((item) => (
               <div key={item.key} className="rounded border p-4">
