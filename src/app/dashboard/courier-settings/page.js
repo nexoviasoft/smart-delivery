@@ -5,11 +5,18 @@ import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
 
 const COURIER_OPTIONS = [
+<<<<<<< HEAD
+=======
+  { value: "pathao", label: "Pathao" },
+>>>>>>> 790594a (update)
   { value: "steadfast", label: "Steadfast Courier" },
 ];
 
 const EMPTY_FORM = {
+<<<<<<< HEAD
   id: "",
+=======
+>>>>>>> 790594a (update)
   courierType: "steadfast",
   apiKey: "",
   secretKey: "",
@@ -18,6 +25,7 @@ const EMPTY_FORM = {
   isDefault: false,
 };
 
+<<<<<<< HEAD
 function mapSettingToForm(setting) {
   return {
     id: setting._id ? String(setting._id) : "",
@@ -30,6 +38,8 @@ function mapSettingToForm(setting) {
   };
 }
 
+=======
+>>>>>>> 790594a (update)
 export default function DashboardCourierSettingsPage() {
   const [settings, setSettings] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -48,6 +58,7 @@ export default function DashboardCourierSettingsPage() {
           setLoading(false);
           return;
         }
+<<<<<<< HEAD
         const fetchedSettings = Array.isArray(json?.data) ? json.data : [];
         setSettings(fetchedSettings);
 
@@ -59,6 +70,9 @@ export default function DashboardCourierSettingsPage() {
         if (selectedSetting) {
           setForm(mapSettingToForm(selectedSetting));
         }
+=======
+        setSettings(Array.isArray(json?.data) ? json.data : []);
+>>>>>>> 790594a (update)
         setLoading(false);
       })
       .catch(() => {
@@ -68,6 +82,7 @@ export default function DashboardCourierSettingsPage() {
   }
 
   useEffect(() => {
+<<<<<<< HEAD
     loadSettings();
   }, []);
 
@@ -82,6 +97,26 @@ export default function DashboardCourierSettingsPage() {
       return;
     }
 
+=======
+    fetch("/api/courier-settings", { headers: getCustomerHeaders() })
+      .then((response) => response.json().then((json) => ({ response, json })))
+      .then(({ response, json }) => {
+        if (!response.ok) {
+          setError(json?.error || "Failed to load settings");
+          setLoading(false);
+          return;
+        }
+        setSettings(Array.isArray(json?.data) ? json.data : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Failed to load settings");
+        setLoading(false);
+      });
+  }, []);
+
+  function handleChange(field, value) {
+>>>>>>> 790594a (update)
     setForm((state) => ({ ...state, [field]: value }));
   }
 
@@ -92,7 +127,11 @@ export default function DashboardCourierSettingsPage() {
     setMessage("");
 
     fetch("/api/courier-settings", {
+<<<<<<< HEAD
       method: "PATCH",
+=======
+      method: "PUT",
+>>>>>>> 790594a (update)
       headers: getCustomerHeaders(),
       body: JSON.stringify(form),
     })

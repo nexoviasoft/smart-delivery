@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+<<<<<<< HEAD
 import * as XLSX from "xlsx";
+=======
+>>>>>>> 790594a (update)
 import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
 
 const EMPTY_FORM = {
+<<<<<<< HEAD
+=======
+  orderNumber: "",
+>>>>>>> 790594a (update)
   customerName: "",
   customerPhone: "",
   customerAddress: "",
   codAmount: "",
+<<<<<<< HEAD
   itemName: "",
   itemQuantity: "1",
   itemPrice: "0",
+=======
+>>>>>>> 790594a (update)
   notes: "",
 };
 
@@ -23,8 +33,11 @@ export default function DashboardOrdersPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+<<<<<<< HEAD
   const [uploading, setUploading] = useState(false);
   const [uploadFileName, setUploadFileName] = useState("");
+=======
+>>>>>>> 790594a (update)
 
   function loadOrders() {
     setLoading(true);
@@ -77,6 +90,7 @@ export default function DashboardOrdersPage() {
       method: "POST",
       headers: getCustomerHeaders(),
       body: JSON.stringify({
+<<<<<<< HEAD
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerAddress: form.customerAddress,
@@ -89,6 +103,10 @@ export default function DashboardOrdersPage() {
           },
         ],
         notes: form.notes,
+=======
+        ...form,
+        codAmount: Number(form.codAmount || 0),
+>>>>>>> 790594a (update)
       }),
     })
       .then((response) => response.json().then((json) => ({ response, json })))
@@ -109,6 +127,7 @@ export default function DashboardOrdersPage() {
       });
   }
 
+<<<<<<< HEAD
   function readFileAsArrayBuffer(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -172,14 +191,29 @@ export default function DashboardOrdersPage() {
     }
   }
 
+=======
+>>>>>>> 790594a (update)
   return (
     <CustomerDashboardShell title="Orders">
       <form onSubmit={handleSubmit} className="rounded border p-4">
         <h2 className="text-lg font-semibold">Create Order</h2>
+<<<<<<< HEAD
         <p className="mt-1 text-sm text-zinc-500">Order number will be auto-generated.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <input
             className="rounded border p-2"
+=======
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <input
+            className="rounded border p-2"
+            placeholder="Order number"
+            value={form.orderNumber}
+            onChange={(event) => onChange("orderNumber", event.target.value)}
+            required
+          />
+          <input
+            className="rounded border p-2"
+>>>>>>> 790594a (update)
             placeholder="Customer name"
             value={form.customerName}
             onChange={(event) => onChange("customerName", event.target.value)}
@@ -208,6 +242,7 @@ export default function DashboardOrdersPage() {
             onChange={(event) => onChange("customerAddress", event.target.value)}
             required
           />
+<<<<<<< HEAD
           <input
             className="rounded border p-2 md:col-span-2"
             placeholder="Item name"
@@ -233,6 +268,8 @@ export default function DashboardOrdersPage() {
             onChange={(event) => onChange("itemPrice", event.target.value)}
             required
           />
+=======
+>>>>>>> 790594a (update)
           <textarea
             className="rounded border p-2 md:col-span-2"
             placeholder="Notes (optional)"
@@ -250,6 +287,7 @@ export default function DashboardOrdersPage() {
         </button>
       </form>
 
+<<<<<<< HEAD
       <div className="mt-4 rounded border p-4">
         <h2 className="text-lg font-semibold">Bulk Upload (Excel/CSV)</h2>
         <p className="mt-1 text-sm text-zinc-500">
@@ -272,6 +310,8 @@ export default function DashboardOrdersPage() {
         </div>
       </div>
 
+=======
+>>>>>>> 790594a (update)
       {message && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
       {error && <p className="mt-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 

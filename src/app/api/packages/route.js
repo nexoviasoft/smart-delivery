@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
+<<<<<<< HEAD
 import { createPackage, getPackages, updatePackage } from "../../../lib/package-store";
+=======
+import { createPackage, getPackages } from "../../../lib/package-store";
+>>>>>>> 790594a (update)
 import { isSuperAdminRequest } from "@/lib/super-admin";
 
 export async function GET() {
@@ -34,6 +38,7 @@ export async function POST(request) {
     package: created.package,
   });
 }
+<<<<<<< HEAD
 
 export async function PUT(request) {
   if (!isSuperAdminRequest(request)) {
@@ -74,3 +79,5 @@ export async function PUT(request) {
     package: updated.package,
   });
 }
+=======
+>>>>>>> 790594a (update)

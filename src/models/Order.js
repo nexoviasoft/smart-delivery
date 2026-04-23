@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+<<<<<<< HEAD
 const orderItemSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -9,6 +10,8 @@ const orderItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+=======
+>>>>>>> 790594a (update)
 const orderSchema = new mongoose.Schema(
   {
     companyId: {
@@ -22,7 +25,10 @@ const orderSchema = new mongoose.Schema(
     customerPhone: { type: String, required: true, trim: true },
     customerAddress: { type: String, required: true, trim: true },
     codAmount: { type: Number, required: true, min: 0 },
+<<<<<<< HEAD
     orderItems: { type: [orderItemSchema], default: [] },
+=======
+>>>>>>> 790594a (update)
     notes: { type: String, default: "" },
     status: {
       type: String,

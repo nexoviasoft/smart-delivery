@@ -1,5 +1,8 @@
 import connectDB from "@/lib/mongodb";
+<<<<<<< HEAD
 import mongoose from "mongoose";
+=======
+>>>>>>> 790594a (update)
 import CourierSetting from "@/models/CourierSetting";
 import { assertTenantContext } from "@/lib/auth-context";
 import { COURIER_TYPES } from "@/lib/constants";
@@ -17,11 +20,16 @@ export async function GET(request) {
   return apiOk(settings);
 }
 
+<<<<<<< HEAD
 export async function PATCH(request) {
+=======
+export async function PUT(request) {
+>>>>>>> 790594a (update)
   const auth = assertTenantContext(request);
   if (auth.error) return apiError(auth.error, auth.status);
 
   const body = await request.json();
+<<<<<<< HEAD
   const {
     id,
     courierType,
@@ -31,6 +39,9 @@ export async function PATCH(request) {
     isActive,
     isDefault,
   } = body;
+=======
+  const { courierType, apiKey, secretKey, baseUrl, isActive, isDefault } = body;
+>>>>>>> 790594a (update)
 
   if (!COURIER_TYPES.includes(courierType)) {
     return apiError("Invalid courier type", 400);
@@ -38,6 +49,10 @@ export async function PATCH(request) {
   if (!apiKey || !secretKey || !baseUrl) {
     return apiError("apiKey, secretKey and baseUrl are required", 400);
   }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 790594a (update)
   await connectDB();
   if (isDefault) {
     await CourierSetting.updateMany(
@@ -50,6 +65,7 @@ export async function PATCH(request) {
     );
   }
 
+<<<<<<< HEAD
   const updatePayload = {
     apiKey,
     secretKey,
@@ -80,6 +96,21 @@ export async function PATCH(request) {
       { new: true, upsert: true }
     );
   }
+=======
+  const setting = await CourierSetting.findOneAndUpdate(
+    { companyId: auth.context.companyId, courierType },
+    {
+      $set: {
+        apiKey,
+        secretKey,
+        baseUrl,
+        isActive: Boolean(isActive),
+        isDefault: Boolean(isDefault),
+      },
+    },
+    { new: true, upsert: true }
+  );
+>>>>>>> 790594a (update)
 
   return apiOk(setting);
 }
