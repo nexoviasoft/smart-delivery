@@ -188,10 +188,6 @@ export default function DashboardDeliveriesPage() {
         setTrackingDeliveryId("");
       });
   }
-<<<<<<< HEAD
-=======
-
->>>>>>> master
   return (
     <CustomerDashboardShell title="Deliveries">
       {message && <p className="mb-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
