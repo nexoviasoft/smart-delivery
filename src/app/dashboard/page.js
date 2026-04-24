@@ -1,38 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import StatsCard from "@/components/dashboard/StatsCard";
+import DataTable from "@/components/dashboard/DataTable";
+import { 
+  OrderIcon, DeliveryIcon, CampaignIcon, 
+  UserIcon, PromotionIcon, UsageIcon 
+} from "@/components/dashboard/DashboardIcons";
+import { motion } from "framer-motion";
 
 const SUMMARY_CONFIG = [
-  { key: "orders", label: "Total Orders", endpoint: "/api/orders" },
-  { key: "deliveries", label: "Total Deliveries", endpoint: "/api/deliveries" },
+  { key: "orders", label: "Total Orders", endpoint: "/api/orders", icon: OrderIcon, color: "indigo" },
+  { key: "deliveries", label: "Total Deliveries", endpoint: "/api/deliveries", icon: DeliveryIcon, color: "emerald" },
   {
     key: "deliverySuccess",
-    label: "Delivery Sent (Success)",
+    label: "Success Deliveries",
     endpoint: "/api/deliveries",
     statusEquals: "sent",
+    icon: DeliveryIcon,
+    color: "emerald"
   },
-  { key: "campaigns", label: "Total Campaigns", endpoint: "/api/campaigns" },
-  { key: "users", label: "Total Users", endpoint: "/api/users" },
-  { key: "emailTemplates", label: "Email Templates", endpoint: "/api/email-promotions/templates" },
+  { key: "campaigns", label: "Total Campaigns", endpoint: "/api/campaigns", icon: CampaignIcon, color: "amber" },
+  { key: "users", label: "Total Users", endpoint: "/api/users", icon: UserIcon, color: "sky" },
+  { key: "emailTemplates", label: "Email Templates", endpoint: "/api/email-promotions/templates", icon: PromotionIcon, color: "rose" },
   {
     key: "emailsSent",
-    label: "Email Sent (Success)",
+    label: "Emails Sent",
     endpoint: "/api/usage/me",
     usageKey: "emails",
+    icon: PromotionIcon,
+    color: "rose"
   },
   {
     key: "wpSent",
-    label: "WP Sent (Success)",
+    label: "WP Sent",
     endpoint: "/api/usage/me",
     usageKey: "wpPromotions",
+    icon: PromotionIcon,
+    color: "emerald"
   },
   {
     key: "courierSent",
-    label: "Courier Sent (Success)",
+    label: "Courier Sent",
     endpoint: "/api/usage/me",
     usageKey: "courierOrders",
+    icon: OrderIcon,
+    color: "indigo"
   },
 ];
 
@@ -149,50 +163,87 @@ export default function DashboardOverviewPage() {
     loadSummaryAndUpdates();
   }, []);
 
-  return (
-    <CustomerDashboardShell title="Overview">
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-      {loading ? (
-        <p className="text-sm text-zinc-500">Loading overview...</p>
-      ) : (
-        <div className="space-y-5">
-          <p className="text-sm text-zinc-600">
-            {tenantCompany?.name
-              ? `All numbers below are for your company: ${tenantCompany.name}.`
-              : "All numbers below are scoped to your logged-in company account."}
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {SUMMARY_CONFIG.map((item) => (
-              <div key={item.key} className="rounded border p-4">
-                <p className="text-sm text-zinc-500">{item.label}</p>
-                <p className="mt-2 text-3xl font-semibold">{counts[item.key] || 0}</p>
-              </div>
-            ))}
-          </div>
+  const columns = [
+    { 
+      header: "Update", 
+      accessor: "title",
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="font-bold text-slate-900">{row.title}</span>
+          <span className="text-xs text-slate-500">{row.meta}</span>
+        </div>
+      )
+    },
+    { 
+      header: "Category", 
+      accessor: "meta",
+      render: (row) => (
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+          {row.meta}
+        </span>
+      )
+    },
+    { 
+      header: "Time", 
+      accessor: "timestamp",
+      render: (row) => (
+        <span className="text-slate-500">{formatRelativeTime(row.timestamp)}</span>
+      )
+    }
+  ];
 
-          <div className="rounded border p-4">
-            <h2 className="text-base font-semibold">Recent Updates</h2>
-            {!recentUpdates.length ? (
-              <p className="mt-2 text-sm text-zinc-500">No recent updates found.</p>
-            ) : (
-              <div className="mt-3 grid gap-2">
-                {recentUpdates.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 rounded bg-zinc-50 px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-zinc-800">{item.title}</p>
-                      <p className="text-xs text-zinc-500">{item.meta}</p>
-                    </div>
-                    <p className="text-xs text-zinc-500">{formatRelativeTime(item.timestamp)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+  return (
+    <div className="space-y-10">
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard Overview</h1>
+        <p className="mt-2 text-slate-500">
+          {tenantCompany?.name
+            ? `Welcome back! Here's what's happening at ${tenantCompany.name}.`
+            : "Welcome back! Here's an overview of your account activity."}
+        </p>
+      </header>
+
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700 ring-1 ring-red-200"
+        >
+          {error}
+        </motion.div>
+      )}
+
+      {loading ? (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-40 animate-pulse rounded-3xl bg-white ring-1 ring-slate-200"></div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-10">
+          <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {SUMMARY_CONFIG.map((item) => (
+              <StatsCard 
+                key={item.key} 
+                label={item.label} 
+                value={counts[item.key] || 0} 
+                icon={item.icon}
+                color={item.color}
+              />
+            ))}
+          </section>
+
+          <section>
+            <DataTable 
+              title="Recent Activity" 
+              subtitle="Latest updates from your orders, campaigns, and more."
+              columns={columns} 
+              data={recentUpdates} 
+              emptyMessage="No recent updates found."
+            />
+          </section>
         </div>
       )}
-    </CustomerDashboardShell>
+    </div>
   );
 }

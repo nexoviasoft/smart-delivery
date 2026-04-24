@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import DataTable from "@/components/dashboard/DataTable";
+import { motion, AnimatePresence } from "framer-motion";
 
-const COURIER_OPTIONS = [
-  { value: "steadfast", label: "Steadfast Courier" },
-];
+const COURIER_OPTIONS = [{ value: "steadfast", label: "Steadfast Courier" }];
 
 const EMPTY_FORM = {
   id: "",
@@ -29,6 +28,7 @@ function mapSettingToForm(setting) {
     isDefault: Boolean(setting.isDefault),
   };
 }
+
 export default function DashboardCourierSettingsPage() {
   const [settings, setSettings] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -37,177 +37,207 @@ export default function DashboardCourierSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  function loadSettings() {
+  async function loadSettings() {
     setLoading(true);
-    fetch("/api/courier-settings", { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load settings");
-          setLoading(false);
-          return;
-        }
-        const fetchedSettings = Array.isArray(json?.data) ? json.data : [];
-        setSettings(fetchedSettings);
-
-        const selectedSetting =
-          fetchedSettings.find((item) => item.courierType === form.courierType) ||
-          fetchedSettings.find((item) => item.isDefault) ||
-          fetchedSettings[0];
-
-        if (selectedSetting) {
-          setForm(mapSettingToForm(selectedSetting));
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load settings");
-        setLoading(false);
-      });
+    try {
+      const response = await fetch("/api/courier-settings", { headers: getCustomerHeaders() });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json?.error || "Failed to load settings");
+      const fetchedSettings = Array.isArray(json?.data) ? json.data : [];
+      setSettings(fetchedSettings);
+      const selected = fetchedSettings.find((i) => i.courierType === form.courierType) || fetchedSettings.find((i) => i.isDefault) || fetchedSettings[0];
+      if (selected) setForm(mapSettingToForm(selected));
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
+  useEffect(() => { loadSettings(); }, []);
 
   function handleChange(field, value) {
     if (field === "courierType") {
-      const existingSetting = settings.find((item) => item.courierType === value);
-      if (existingSetting) {
-        setForm(mapSettingToForm(existingSetting));
-      } else {
-        setForm({ ...EMPTY_FORM, courierType: value });
-      }
-      return;
+      const existing = settings.find((i) => i.courierType === value);
+      setForm(existing ? mapSettingToForm(existing) : { ...EMPTY_FORM, courierType: value });
+    } else {
+      setForm((s) => ({ ...s, [field]: value }));
     }
-    setForm((state) => ({ ...state, [field]: value }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
     setMessage("");
 
-    fetch("/api/courier-settings", {
-      method: "PATCH",
-      headers: getCustomerHeaders(),
-      body: JSON.stringify(form),
-    })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to save setting");
-          setSubmitting(false);
-          return;
-        }
-        setMessage("Courier setting saved");
-        setSubmitting(false);
-        loadSettings();
-      })
-      .catch(() => {
-        setError("Failed to save setting");
-        setSubmitting(false);
+    try {
+      const res = await fetch("/api/courier-settings", {
+        method: "PATCH",
+        headers: getCustomerHeaders(),
+        body: JSON.stringify(form),
       });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to save setting");
+      setMessage("Courier setting saved successfully");
+      loadSettings();
+    } catch (err) { setError(err.message); } finally { setSubmitting(false); }
   }
 
+  const columns = [
+    { 
+      header: "Courier", 
+      accessor: "courierType",
+      render: (row) => <span className="font-bold text-slate-900 capitalize">{row.courierType}</span>
+    },
+    { header: "Base URL", accessor: "baseUrl" },
+    { header: "API Key", accessor: "apiKey" },
+    { 
+      header: "Status", 
+      accessor: "isActive",
+      render: (row) => (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${
+          row.isActive ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
+        }`}>
+          {row.isActive ? "Active" : "Inactive"}
+        </span>
+      )
+    },
+    { 
+      header: "Default", 
+      accessor: "isDefault",
+      render: (row) => row.isDefault ? (
+        <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-600">Default</span>
+      ) : <span className="text-slate-400 text-xs">-</span>
+    }
+  ];
+
   return (
-    <CustomerDashboardShell title="Courier Settings">
-      <form onSubmit={handleSubmit} className="rounded border p-4">
-        <h2 className="text-lg font-semibold">Setup Courier</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <select
-            className="rounded border p-2"
-            value={form.courierType}
-            onChange={(event) => handleChange("courierType", event.target.value)}
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Courier Settings</h1>
+        <p className="mt-2 text-slate-500">Configure your courier integrations and API keys.</p>
+      </header>
+
+      <AnimatePresence mode="wait">
+        {message && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200"
           >
-            {COURIER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <input
-            className="rounded border p-2"
-            placeholder="Base URL"
-            value={form.baseUrl}
-            onChange={(event) => handleChange("baseUrl", event.target.value)}
-            required
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="API Key"
-            value={form.apiKey}
-            onChange={(event) => handleChange("apiKey", event.target.value)}
-            required
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Secret Key"
-            value={form.secretKey}
-            onChange={(event) => handleChange("secretKey", event.target.value)}
-            required
-          />
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.isActive}
-            onChange={(event) => handleChange("isActive", event.target.checked)}
-          />
-          Active
-        </label>
-        <label className="mt-2 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.isDefault}
-            onChange={(event) => handleChange("isDefault", event.target.checked)}
-          />
-          Set as default courier
-        </label>
-        <button
-          type="submit"
-          className="mt-3 rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-60"
-          disabled={submitting}
-        >
-          {submitting ? "Saving..." : "Save Setting"}
-        </button>
-      </form>
-
-      {message && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
-      {error && <p className="mt-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-
-      <div className="mt-6 rounded border p-4">
-        <h2 className="text-lg font-semibold">Saved Courier Settings</h2>
-        {loading ? (
-          <p className="mt-3 text-sm text-zinc-500">Loading settings...</p>
-        ) : (
-          <div className="mt-3 overflow-auto">
-            <table className="w-full min-w-[700px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-100 text-left">
-                  <th className="border p-2">Courier</th>
-                  <th className="border p-2">Base URL</th>
-                  <th className="border p-2">API Key</th>
-                  <th className="border p-2">Status</th>
-                  <th className="border p-2">Default</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settings.map((item) => (
-                  <tr key={item._id}>
-                    <td className="border p-2 capitalize">{item.courierType}</td>
-                    <td className="border p-2">{item.baseUrl}</td>
-                    <td className="border p-2">{item.apiKey}</td>
-                    <td className="border p-2">{item.isActive ? "Active" : "Inactive"}</td>
-                    <td className="border p-2">{item.isDefault ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            {message}
+          </motion.div>
         )}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200"
+          >
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-8">
+          <h2 className="text-lg font-bold text-slate-900">Setup Integration</h2>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Courier Service</label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-indigo-600 transition-all"
+                  value={form.courierType}
+                  onChange={(e) => handleChange("courierType", e.target.value)}
+                >
+                  {COURIER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Base URL</label>
+                <input
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-indigo-600 transition-all"
+                  placeholder="https://api.steadfast.com.bd"
+                  value={form.baseUrl}
+                  onChange={(e) => handleChange("baseUrl", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">API Key</label>
+                <input
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-indigo-600 transition-all"
+                  placeholder="Enter API Key"
+                  value={form.apiKey}
+                  onChange={(e) => handleChange("apiKey", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Secret Key</label>
+                <input
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:border-indigo-600 transition-all"
+                  placeholder="Enter Secret Key"
+                  value={form.secretKey}
+                  onChange={(e) => handleChange("secretKey", e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-2xl bg-slate-50 p-6">
+              <label className="flex cursor-pointer items-center justify-between">
+                <div>
+                  <span className="block font-bold text-slate-900">Active Integration</span>
+                  <span className="text-xs text-slate-500">Enable this courier for shipments.</span>
+                </div>
+                <input type="checkbox" className="h-5 w-5 rounded border-slate-300 text-indigo-600" checked={form.isActive} onChange={(e) => handleChange("isActive", e.target.checked)} />
+              </label>
+              <div className="h-px bg-slate-200" />
+              <label className="flex cursor-pointer items-center justify-between">
+                <div>
+                  <span className="block font-bold text-slate-900">Set as Default</span>
+                  <span className="text-xs text-slate-500">Automatically use this for new orders.</span>
+                </div>
+                <input type="checkbox" className="h-5 w-5 rounded border-slate-300 text-indigo-600" checked={form.isDefault} onChange={(e) => handleChange("isDefault", e.target.checked)} />
+              </label>
+            </div>
+
+            <button
+              type="submit" disabled={submitting}
+              className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-bold text-white shadow-xl transition-all hover:bg-black disabled:opacity-50"
+            >
+              {submitting ? "Saving Configuration..." : "Save Configuration"}
+            </button>
+          </form>
+        </section>
+
+        <aside className="space-y-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8">
+            <h3 className="font-bold text-slate-900">Quick Guide</h3>
+            <ul className="mt-4 space-y-4 text-sm text-slate-500">
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600">1</span>
+                Get your API & Secret keys from your courier dashboard.
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600">2</span>
+                Enter the Base URL provided in their API documentation.
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600">3</span>
+                Test with a single order before bulk sending.
+              </li>
+            </ul>
+          </div>
+        </aside>
       </div>
-    </CustomerDashboardShell>
+
+      <section>
+        <DataTable 
+          title="Saved Settings" 
+          subtitle="Manage your connected courier services."
+          columns={columns} 
+          data={settings} 
+          emptyMessage="No courier settings found. Add your first integration above."
+        />
+      </section>
+    </div>
   );
 }

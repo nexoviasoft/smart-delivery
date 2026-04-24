@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import DataTable from "@/components/dashboard/DataTable";
+import { motion, AnimatePresence } from "framer-motion";
 
 const EMPTY_FORM = {
   name: "",
@@ -18,155 +19,158 @@ export default function DashboardUsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("list");
 
-  function loadUsers() {
+  async function loadUsers() {
     setLoading(true);
-    fetch("/api/users", { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load users");
-          setLoading(false);
-          return;
-        }
-        setUsers(Array.isArray(json?.data) ? json.data : []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load users");
-        setLoading(false);
-      });
+    try {
+      const res = await fetch("/api/users", { headers: getCustomerHeaders() });
+      const json = await res.json();
+      if (res.ok) setUsers(Array.isArray(json?.data) ? json.data : []);
+      else throw new Error(json?.error || "Failed to load users");
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    fetch("/api/users", { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load users");
-          setLoading(false);
-          return;
-        }
-        setUsers(Array.isArray(json?.data) ? json.data : []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load users");
-        setLoading(false);
-      });
-  }, []);
+  useEffect(() => { loadUsers(); }, []);
 
   function handleChange(field, value) {
     setForm((state) => ({ ...state, [field]: value }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
     setMessage("");
 
-    fetch("/api/users", {
-      method: "POST",
-      headers: getCustomerHeaders(),
-      body: JSON.stringify(form),
-    })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to create user");
-          setSubmitting(false);
-          return;
-        }
-        setMessage("User created successfully");
-        setForm(EMPTY_FORM);
-        setSubmitting(false);
-        loadUsers();
-      })
-      .catch(() => {
-        setError("Failed to create user");
-        setSubmitting(false);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: getCustomerHeaders(),
+        body: JSON.stringify(form),
       });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to create user");
+      setMessage("User created successfully");
+      setForm(EMPTY_FORM);
+      loadUsers();
+      setActiveTab("list");
+    } catch (err) { setError(err.message); }
+    finally { setSubmitting(false); }
   }
 
+  const columns = [
+    { 
+      header: "Name", 
+      accessor: "name",
+      render: (row) => <span className="font-bold text-slate-900">{row.name}</span>
+    },
+    { header: "Email", accessor: "email" },
+    { 
+      header: "Role", 
+      accessor: "role",
+      render: (row) => (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+          row.role === "admin" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-600"
+        }`}>
+          {row.role}
+        </span>
+      )
+    },
+    { 
+      header: "Status", 
+      accessor: "isActive",
+      render: (row) => (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+          row.isActive ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+        }`}>
+          {row.isActive ? "Active" : "Inactive"}
+        </span>
+      )
+    }
+  ];
+
   return (
-    <CustomerDashboardShell title="Users">
-      <form onSubmit={handleSubmit} className="rounded border p-4">
-        <h2 className="text-lg font-semibold">Create User</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <input
-            className="rounded border p-2"
-            placeholder="Name"
-            value={form.name}
-            onChange={(event) => handleChange("name", event.target.value)}
-            required
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Email"
-            type="email"
-            value={form.email}
-            onChange={(event) => handleChange("email", event.target.value)}
-            required
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Password"
-            type="password"
-            value={form.password}
-            onChange={(event) => handleChange("password", event.target.value)}
-            required
-          />
-          <select
-            className="rounded border p-2"
-            value={form.role}
-            onChange={(event) => handleChange("role", event.target.value)}
-          >
-            <option value="admin">Admin</option>
-            <option value="staff">Staff</option>
-          </select>
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">User Management</h1>
+          <p className="mt-2 text-slate-500">Add and manage staff members for your dashboard.</p>
         </div>
-        <button
-          type="submit"
-          className="mt-3 rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-60"
-          disabled={submitting}
-        >
-          {submitting ? "Creating..." : "Create User"}
-        </button>
-      </form>
+        <div className="flex gap-2 rounded-2xl bg-slate-100 p-1.5">
+          <button 
+            onClick={() => setActiveTab("list")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${activeTab === "list" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            User List
+          </button>
+          <button 
+            onClick={() => setActiveTab("create")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${activeTab === "create" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            Create User
+          </button>
+        </div>
+      </header>
 
-      {message && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
-      {error && <p className="mt-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-
-      <div className="mt-6 rounded border p-4">
-        <h2 className="text-lg font-semibold">Users List</h2>
-        {loading ? (
-          <p className="mt-3 text-sm text-zinc-500">Loading users...</p>
-        ) : (
-          <div className="mt-3 overflow-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-100 text-left">
-                  <th className="border p-2">Name</th>
-                  <th className="border p-2">Email</th>
-                  <th className="border p-2">Role</th>
-                  <th className="border p-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user._id}>
-                    <td className="border p-2">{user.name}</td>
-                    <td className="border p-2">{user.email}</td>
-                    <td className="border p-2 capitalize">{user.role}</td>
-                    <td className="border p-2">{user.isActive ? "Active" : "Inactive"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <AnimatePresence mode="wait">
+        {message && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
+            {message}
+          </motion.div>
         )}
-      </div>
-    </CustomerDashboardShell>
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200">
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {activeTab === "create" ? (
+          <motion.div 
+            key="create"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+            className="max-w-xl mx-auto"
+          >
+            <section className="rounded-3xl border border-slate-200 bg-white p-8">
+              <h2 className="text-xl font-bold text-slate-900">Create New User</h2>
+              <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full Name</label>
+                  <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-600 transition-all" placeholder="e.g. John Doe" value={form.name} onChange={e => handleChange("name", e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Email Address</label>
+                  <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-600 transition-all" type="email" placeholder="john@example.com" value={form.email} onChange={e => handleChange("email", e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Password</label>
+                  <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-600 transition-all" type="password" placeholder="••••••••" value={form.password} onChange={e => handleChange("password", e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Role</label>
+                  <select className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-600 transition-all" value={form.role} onChange={e => handleChange("role", e.target.value)}>
+                    <option value="admin">Admin</option>
+                    <option value="staff">Staff</option>
+                  </select>
+                </div>
+                <button type="submit" disabled={submitting} className="w-full rounded-2xl bg-slate-900 py-4 text-sm font-bold text-white shadow-xl transition-all hover:bg-black disabled:opacity-50">
+                  {submitting ? "Creating User..." : "Create User"}
+                </button>
+              </form>
+            </section>
+          </motion.div>
+        ) : (
+          <motion.section 
+            key="list"
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+          >
+            <DataTable title="System Users" subtitle="List of all accounts with access to this dashboard." columns={columns} data={users} emptyMessage="No users found. Create your first user account using the form." />
+          </motion.section>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

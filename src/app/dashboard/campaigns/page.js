@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
 import RichTextEditor from "@/components/rich-text-editor";
 import useImgbbUpload from "@/hooks/use-imgbb-upload";
+import DataTable from "@/components/dashboard/DataTable";
+import { motion, AnimatePresence } from "framer-motion";
 
 const FIELD_TYPES = ["text", "phone", "email", "textarea", "select", "radio", "checkbox"];
 const FONT_OPTIONS = [
@@ -39,15 +40,15 @@ export default function DashboardCampaignsPage() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [brandColor, setBrandColor] = useState("#18181b");
-  const [pageBgColor, setPageBgColor] = useState("#f4f4f5");
+  const [brandColor, setBrandColor] = useState("#4f46e5");
+  const [pageBgColor, setPageBgColor] = useState("#f8fafc");
   const [cardBgColor, setCardBgColor] = useState("#ffffff");
-  const [titleColor, setTitleColor] = useState("#18181b");
-  const [descriptionColor, setDescriptionColor] = useState("#71717a");
+  const [titleColor, setTitleColor] = useState("#0f172a");
+  const [descriptionColor, setDescriptionColor] = useState("#64748b");
   const [inputBgColor, setInputBgColor] = useState("#ffffff");
-  const [inputBorderColor, setInputBorderColor] = useState("#e4e4e7");
+  const [inputBorderColor, setInputBorderColor] = useState("#e2e8f0");
   const [buttonTextColor, setButtonTextColor] = useState("#ffffff");
-  const [borderRadius, setBorderRadius] = useState(12);
+  const [borderRadius, setBorderRadius] = useState(16);
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [fontFamily, setFontFamily] = useState("Inter");
   const [submitButtonText, setSubmitButtonText] = useState("Submit");
@@ -92,24 +93,26 @@ export default function DashboardCampaignsPage() {
 
   async function loadCampaigns() {
     setLoading(true);
-    const response = await fetch("/api/campaigns", { headers: getCustomerHeaders() });
-    const json = await response.json();
+    try {
+      const response = await fetch("/api/campaigns", { headers: getCustomerHeaders() });
+      const json = await response.json();
 
-    if (!response.ok) {
-      setError(json?.error || "Failed to load campaigns");
+      if (!response.ok) {
+        setError(json?.error || "Failed to load campaigns");
+        setLoading(false);
+        return;
+      }
+
+      setCampaigns(Array.isArray(json?.data) ? json.data : []);
+    } catch {
+      setError("Failed to load campaigns");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setCampaigns(Array.isArray(json?.data) ? json.data : []);
-    setLoading(false);
   }
 
   useEffect(() => {
-    loadCampaigns().catch(() => {
-      setError("Failed to load campaigns");
-      setLoading(false);
-    });
+    loadCampaigns();
   }, []);
 
   const previewFields = useMemo(
@@ -195,9 +198,8 @@ export default function DashboardCampaignsPage() {
     setMessage("Campaign form created successfully.");
     setName("");
     setDescription("");
-    setBrandColor("#18181b");
-
-    setPageBgColor("#f4f4f5");
+    setBrandColor("#4f46e5");
+    setPageBgColor("#f8fafc");
     setCardBgColor("#ffffff");
     setSubmitButtonText("Submit");
     setSuccessMessage("Thank you! Your response has been submitted.");
@@ -232,461 +234,332 @@ export default function DashboardCampaignsPage() {
     setDeletingId("");
   }
 
-  return (
-    <CustomerDashboardShell title="Campaigns">
-      {message && <p className="mb-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+  const columns = [
+    { 
+      header: "Name", 
+      accessor: "name",
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="font-bold text-slate-900">{row.name}</span>
+          <span className="text-xs text-slate-500">{Array.isArray(row.fields) ? row.fields.length : 0} fields</span>
+        </div>
+      )
+    },
+    { 
+      header: "Status", 
+      accessor: "status",
+      render: (row) => (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${
+          row.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"
+        }`}>
+          {row.status}
+        </span>
+      )
+    },
+    { 
+      header: "Share URL", 
+      accessor: "slug",
+      render: (row) => {
+        const shareUrl = buildShareUrl(`/f/${row.publicToken || row.slug}`);
+        return (
+          <a href={shareUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline truncate max-w-[200px] block">
+            {shareUrl}
+          </a>
+        );
+      }
+    },
+    { 
+      header: "Actions", 
+      accessor: "_id",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/dashboard/leads?campaignId=${row._id}`}
+            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
+          >
+            Leads
+          </Link>
+          <button
+            type="button"
+            className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50"
+            disabled={deletingId === row._id}
+            onClick={() => handleDeleteCampaign(row._id)}
+          >
+            {deletingId === row._id ? "..." : "Delete"}
+          </button>
+        </div>
+      )
+    }
+  ];
 
-      <div className="mb-4 flex flex-wrap gap-2 rounded border bg-white p-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("create")}
-          className={`rounded px-3 py-1.5 text-sm ${
-            activeTab === "create" ? "bg-zinc-900 text-white" : "border text-zinc-700"
-          }`}
-        >
-          Create Form
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("campaign")}
-          className={`rounded px-3 py-1.5 text-sm ${
-            activeTab === "campaign" ? "bg-zinc-900 text-white" : "border text-zinc-700"
-          }`}
-        >
-          Campaign Form
-        </button>
-      </div>
+  return (
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Campaigns</h1>
+          <p className="mt-2 text-slate-500">Manage your dynamic forms and feedback campaigns.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-2xl border bg-white p-1.5 shadow-sm">
+          <button
+            onClick={() => setActiveTab("create")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+              activeTab === "create" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Create Form
+          </button>
+          <button
+            onClick={() => setActiveTab("campaign")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+              activeTab === "campaign" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Form List
+          </button>
+        </div>
+      </header>
+
+      <AnimatePresence mode="wait">
+        {message && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200"
+          >
+            {message}
+          </motion.div>
+        )}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200"
+          >
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {activeTab === "create" ? (
-        <>
-          <form onSubmit={handleCreateCampaign} className="rounded border p-4">
-            <h2 className="text-lg font-semibold">Create Dynamic Form</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Build Google Form style campaign form and share the URL.
-            </p>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <input
-                className="rounded border p-2"
-                placeholder="Campaign name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-              />
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-zinc-600">Description (optional)</label>
-                <RichTextEditor value={description} onChange={setDescription} minHeight={180} />
+        <div className="grid gap-8 xl:grid-cols-[1fr_400px]">
+          <motion.form 
+            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+            onSubmit={handleCreateCampaign} 
+            className="space-y-8 rounded-3xl border border-slate-200 bg-white p-8"
+          >
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Campaign Details</h2>
+              <div className="mt-4 grid gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Form Name</label>
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/10"
+                    placeholder="e.g. Customer Feedback Q2"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Description</label>
+                  <RichTextEditor value={description} onChange={setDescription} minHeight={180} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Redirect Link (Optional)</label>
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/10"
+                    placeholder="https://yourwebsite.com/thanks"
+                    value={redirectUrl}
+                    onChange={(e) => setRedirectUrl(e.target.value)}
+                  />
+                </div>
               </div>
-
-              <input
-                className="rounded border p-2"
-                placeholder="After submit redirect link (https://...)"
-                value={redirectUrl}
-                onChange={(event) => setRedirectUrl(event.target.value)}
-              />
             </div>
 
-            <div className="mt-4 grid gap-4 rounded border bg-zinc-50/50 p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-900">
-                Form UI Designer
-              </h3>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="md:col-span-3">
-                  <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                    Header Image URL (Optional banner, imgbb supported)
+            <div className="rounded-3xl bg-slate-50 p-6">
+              <h2 className="text-lg font-bold text-slate-900">UI Customization</h2>
+              <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Header Image</label>
+                  <div className="flex items-center gap-3">
                     <input
-                      className="rounded border p-2 text-sm"
-                      placeholder="https://example.com/banner.jpg"
+                      className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none transition-all focus:border-indigo-600"
+                      placeholder="Image URL"
                       value={headerImageUrl}
-                      onChange={(event) => {
-                        clearHeaderImageUploadError();
-                        setHeaderImageUrl(event.target.value);
-                      }}
+                      onChange={(e) => setHeaderImageUrl(e.target.value)}
                     />
-                  </label>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label className="rounded border px-3 py-1.5 text-xs font-medium text-zinc-700">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleHeaderImageUpload}
-                        disabled={uploadingHeaderImage}
-                      />
-                      {uploadingHeaderImage ? "Uploading to imgbb..." : "Upload to imgbb"}
+                    <label className="cursor-pointer rounded-xl bg-white border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                      {uploadingHeaderImage ? "..." : "Upload"}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleHeaderImageUpload} disabled={uploadingHeaderImage} />
                     </label>
-                    {headerImageUrl ? (
-                      <a
-                        href={headerImageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-blue-700 underline"
-                      >
-                        Preview uploaded image
-                      </a>
-                    ) : null}
                   </div>
-                  {headerImageUploadError ? (
-                    <p className="mt-1 text-xs text-red-600">{headerImageUploadError}</p>
-                  ) : null}
                 </div>
 
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Font Family
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Font</label>
                   <select
-                    className="rounded border p-2 text-sm"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-indigo-600"
                     value={fontFamily}
-                    onChange={(event) => setFontFamily(event.target.value)}
+                    onChange={(e) => setFontFamily(e.target.value)}
                   >
                     {FONT_OPTIONS.map((font) => (
-                      <option key={font} value={font}>
-                        {font}
-                      </option>
+                      <option key={font} value={font}>{font}</option>
                     ))}
                   </select>
-                </label>
+                </div>
 
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Corner Roundness ({borderRadius}px)
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Corners: {borderRadius}px</label>
                   <input
-                    type="range"
-                    min="0"
-                    max="40"
-                    className="h-10"
-                    value={borderRadius}
-                    onChange={(event) => setBorderRadius(parseInt(event.target.value, 10))}
+                    type="range" min="0" max="40" className="h-1.5 w-full accent-indigo-600"
+                    value={borderRadius} onChange={(e) => setBorderRadius(parseInt(e.target.value, 10))}
                   />
-                </label>
+                </div>
 
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Submit Button Text
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Button Text</label>
                   <input
-                    className="rounded border p-2 text-sm"
-                    value={submitButtonText}
-                    onChange={(event) => setSubmitButtonText(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm outline-none focus:border-indigo-600"
+                    value={submitButtonText} onChange={(e) => setSubmitButtonText(e.target.value)}
                   />
-                </label>
-              </div>
+                </div>
 
-              <hr className="my-1 border-zinc-200" />
-
-              <div className="grid gap-4 md:grid-cols-4">
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Primary (Button) Color
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={brandColor}
-                    onChange={(event) => setBrandColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Button Text Color
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={buttonTextColor}
-                    onChange={(event) => setButtonTextColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Page Background
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={pageBgColor}
-                    onChange={(event) => setPageBgColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Card Background
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={cardBgColor}
-                    onChange={(event) => setCardBgColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Title Text Color
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={titleColor}
-                    onChange={(event) => setTitleColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Description Color
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={descriptionColor}
-                    onChange={(event) => setDescriptionColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Field Background
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={inputBgColor}
-                    onChange={(event) => setInputBgColor(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-medium text-zinc-600">
-                  Field Border Color
-                  <input
-                    type="color"
-                    className="h-10 w-full rounded border p-1"
-                    value={inputBorderColor}
-                    onChange={(event) => setInputBorderColor(event.target.value)}
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-1 text-xs font-medium text-zinc-600">
-                Success Message after submit
-                <input
-                  className="rounded border p-2 text-sm"
-                  placeholder="e.g. Thanks for joining!"
-                  value={successMessage}
-                  onChange={(event) => setSuccessMessage(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              {fields.map((field) => (
-                <div key={field.id} className="rounded border p-3">
-                  <div className="grid gap-2 md:grid-cols-4">
-                    <input
-                      className="rounded border p-2"
-                      placeholder="Field label"
-                      value={field.label}
-                      onChange={(event) => updateField(field.id, { label: event.target.value })}
-                      required
-                    />
-                    <input
-                      className="rounded border p-2"
-                      placeholder="Field key (optional)"
-                      value={field.key}
-                      onChange={(event) => updateField(field.id, { key: event.target.value })}
-                    />
-                    <select
-                      className="rounded border p-2"
-                      value={field.type}
-                      onChange={(event) => updateField(field.id, { type: event.target.value })}
-                    >
-                      {FIELD_TYPES.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="flex items-center gap-2 rounded border p-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        onChange={(event) => updateField(field.id, { required: event.target.checked })}
-                      />
-                      Required
-                    </label>
-                  </div>
-
-                  {["select", "radio", "checkbox"].includes(field.type) ? (
-                    <input
-                      className="mt-2 w-full rounded border p-2"
-                      placeholder="Options separated by comma (e.g. Dhaka, Chittagong)"
-                      value={field.optionsText}
-                      onChange={(event) => updateField(field.id, { optionsText: event.target.value })}
-                    />
-                  ) : null}
-
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      className="rounded border border-red-200 px-3 py-1 text-xs text-red-700"
-                      onClick={() => removeField(field.id)}
-                    >
-                      Remove Field
-                    </button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Primary Color</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" className="h-10 w-10 overflow-hidden rounded-lg border-0 p-0" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} />
+                    <span className="text-xs font-mono text-slate-500 uppercase">{brandColor}</span>
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={addField} className="rounded border px-3 py-2 text-sm">
-                Add Field
-              </button>
+            <div>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-slate-900">Form Fields</h2>
+                <button type="button" onClick={addField} className="text-xs font-bold text-indigo-600 hover:text-indigo-500">
+                  + Add Field
+                </button>
+              </div>
+              <div className="mt-4 space-y-4">
+                {fields.map((field, idx) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    key={field.id} className="relative rounded-2xl border border-slate-200 p-4"
+                  >
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div className="sm:col-span-2">
+                        <input
+                          className="w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10"
+                          placeholder="Label (e.g. Your Name)"
+                          value={field.label}
+                          onChange={(e) => updateField(field.id, { label: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <select
+                        className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm outline-none"
+                        value={field.type}
+                        onChange={(e) => updateField(field.id, { type: e.target.value })}
+                      >
+                        {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <div className="flex items-center gap-2 px-2">
+                        <input type="checkbox" checked={field.required} onChange={(e) => updateField(field.id, { required: e.target.checked })} />
+                        <span className="text-xs font-medium text-slate-600">Required</span>
+                      </div>
+                    </div>
+                    {["select", "radio", "checkbox"].includes(field.type) && (
+                      <input
+                        className="mt-3 w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs outline-none"
+                        placeholder="Options (comma separated)"
+                        value={field.optionsText}
+                        onChange={(e) => updateField(field.id, { optionsText: e.target.value })}
+                      />
+                    )}
+                    {fields.length > 1 && (
+                      <button type="button" onClick={() => removeField(field.id)} className="absolute -right-2 -top-2 rounded-full bg-white p-1 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-rose-500">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4">
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+                className="w-full rounded-2xl bg-indigo-600 py-4 text-sm font-bold text-white shadow-xl shadow-indigo-600/20 transition-all hover:bg-indigo-700 hover:translate-y-[-2px] disabled:opacity-50"
               >
-                {submitting ? "Creating..." : "Create Campaign Form"}
+                {submitting ? "Creating Campaign..." : "Create Campaign Form"}
               </button>
             </div>
-          </form>
+          </motion.form>
 
-          <div className="mt-8 overflow-hidden rounded-xl border bg-white shadow-sm">
-            <div className="border-b bg-zinc-50 px-4 py-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-              Real-time Visual Preview
+          <aside className="sticky top-24 hidden h-fit space-y-6 lg:block">
+            <div className="rounded-3xl border border-slate-200 bg-slate-900 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              Live Preview
             </div>
-            <div className="p-8" style={{ backgroundColor: pageBgColor, fontFamily: fontFamily }}>
-              <div
-                className="mx-auto w-full max-w-lg overflow-hidden shadow-2xl transition-all duration-300"
-                style={{
-                  backgroundColor: cardBgColor,
-                  borderRadius: `${borderRadius}px`,
-                }}
+            <div 
+              className="overflow-hidden shadow-2xl transition-all duration-500" 
+              style={{ backgroundColor: pageBgColor, fontFamily: fontFamily, borderRadius: "24px" }}
+            >
+              <div 
+                className="mx-auto w-full border border-black/5 shadow-inner" 
+                style={{ backgroundColor: cardBgColor, borderRadius: `${borderRadius}px` }}
               >
                 {headerImageUrl && (
-                  <img
-                    src={headerImageUrl}
-                    alt="Banner"
-                    className="h-32 w-full object-cover"
-                    onError={(e) => (e.target.style.display = "none")}
-                  />
+                  <img src={headerImageUrl} alt="Preview" className="h-24 w-full object-cover" />
                 )}
                 <div className="p-6">
-                  <h1 className="text-2xl font-bold" style={{ color: titleColor }}>
-                    {name || "Campaign Title"}
-                  </h1>
-                  {description && (
-                    <div
-                      className="mt-2 text-sm"
-                      style={{ color: descriptionColor }}
-                      dangerouslySetInnerHTML={{ __html: description }}
-                    />
-                  )}
+                  <h3 className="text-xl font-bold" style={{ color: titleColor }}>{name || "Campaign Name"}</h3>
+                  <div 
+                    className="mt-2 text-xs opacity-80" 
+                    style={{ color: descriptionColor }} 
+                    dangerouslySetInnerHTML={{ __html: description || "Form description goes here..." }} 
+                  />
 
                   <div className="mt-6 space-y-4">
                     {previewFields.length === 0 ? (
-                      <p className="py-10 text-center text-xs text-zinc-400">
-                        Add some fields to see them here...
-                      </p>
+                      <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-[10px] text-slate-400">Add fields to preview</div>
                     ) : (
-                      previewFields.map((field) => (
-                        <div key={field.id} className="space-y-1.5">
-                          <label className="text-xs font-semibold text-zinc-700">
-                            {field.label} {field.required && <span className="text-red-500">*</span>}
-                          </label>
-                          <div
-                            className="w-full border p-2 text-sm text-zinc-500"
-                            style={{
-                              backgroundColor: inputBgColor,
-                              borderColor: inputBorderColor,
-                              borderRadius: `${borderRadius / 2}px`,
-                            }}
+                      previewFields.map((f) => (
+                        <div key={f.id} className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600">{f.label} {f.required && "*"}</label>
+                          <div 
+                            className="w-full border p-2.5 text-xs text-slate-400" 
+                            style={{ backgroundColor: inputBgColor, borderColor: inputBorderColor, borderRadius: `${borderRadius / 2}px` }}
                           >
-                            {field.type === "select"
-                              ? "Select an option..."
-                              : field.type === "textarea"
-                              ? "Enter your message..."
-                              : `Enter ${field.label.toLowerCase()}...`}
+                            Enter {f.label}...
                           </div>
                         </div>
                       ))
                     )}
-
-                    <button
-                      disabled
-                      className="mt-4 w-full py-2.5 text-sm font-bold shadow-sm transition-all"
-                      style={{
-                        backgroundColor: brandColor,
-                        color: buttonTextColor,
-                        borderRadius: `${borderRadius / 2}px`,
-                      }}
+                    <div 
+                      className="mt-2 py-3 text-center text-xs font-bold" 
+                      style={{ backgroundColor: brandColor, color: buttonTextColor, borderRadius: `${borderRadius / 2}px` }}
                     >
                       {submitButtonText}
-                    </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </>
-      ) : (
-        <div className="rounded border p-4">
-          <h2 className="text-lg font-semibold">Campaign Forms</h2>
-          {loading ? (
-            <p className="mt-3 text-sm text-zinc-500">Loading campaigns...</p>
-          ) : (
-            <div className="mt-3 overflow-auto">
-              <table className="w-full min-w-[780px] border-collapse text-sm">
-                <thead>
-                  <tr className="bg-zinc-100 text-left">
-                    <th className="border p-2">Name</th>
-                    <th className="border p-2">Status</th>
-                    <th className="border p-2">Fields</th>
-                    <th className="border p-2">Redirect URL</th>
-                    <th className="border p-2">Share URL</th>
-                    <th className="border p-2">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaigns.map((campaign) => {
-                    const publicPathToken = String(campaign.publicToken || campaign.slug || "");
-                    const sharePath = `/f/${encodeURIComponent(publicPathToken)}`;
-                    const shareUrl = buildShareUrl(sharePath);
-
-                    return (
-                      <tr key={campaign._id}>
-                        <td className="border p-2">{campaign.name}</td>
-                        <td className="border p-2 capitalize">{campaign.status}</td>
-                        <td className="border p-2">
-                          {Array.isArray(campaign.fields) ? campaign.fields.length : 0}
-                        </td>
-                        <td className="border p-2">
-                          {campaign.redirectUrl ? (
-                            <a
-                              href={campaign.redirectUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-600 underline"
-                            >
-                              {campaign.redirectUrl}
-                            </a>
-                          ) : (
-                            <span className="text-zinc-400">None</span>
-                          )}
-                        </td>
-                        <td className="border p-2">
-                          <a className="text-blue-700 underline" href={shareUrl} target="_blank" rel="noreferrer">
-                            {shareUrl}
-                          </a>
-                        </td>
-                        <td className="border p-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Link
-                              href={`/dashboard/leads?campaignId=${campaign._id}`}
-                              className="rounded border px-3 py-1 text-xs"
-                            >
-                              View Leads
-                            </Link>
-                            <button
-                              type="button"
-                              className="rounded border border-red-200 px-3 py-1 text-xs text-red-700 disabled:opacity-60"
-                              disabled={deletingId === campaign._id}
-                              onClick={() => handleDeleteCampaign(campaign._id)}
-                            >
-                              {deletingId === campaign._id ? "Deleting..." : "Delete"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          </aside>
         </div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <DataTable 
+            title="Active Campaigns" 
+            subtitle="Manage and share your live campaign forms."
+            columns={columns} 
+            data={campaigns} 
+            emptyMessage="No campaigns found. Create your first form!"
+          />
+        </motion.div>
       )}
-    </CustomerDashboardShell>
+    </div>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import DataTable from "@/components/dashboard/DataTable";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function DashboardDeliveriesPage() {
   const [deliveries, setDeliveries] = useState([]);
@@ -18,37 +19,19 @@ export default function DashboardDeliveriesPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/deliveries", { headers: getCustomerHeaders() }).then((response) =>
-        response.json().then((json) => ({ response, json }))
-      ),
-      fetch("/api/courier-settings", { headers: getCustomerHeaders() }).then((response) =>
-        response.json().then((json) => ({ response, json }))
-      ),
+      fetch("/api/deliveries", { headers: getCustomerHeaders() }).then((r) => r.json()),
+      fetch("/api/courier-settings", { headers: getCustomerHeaders() }).then((r) => r.json()),
     ])
-      .then(([deliveriesResult, settingsResult]) => {
-        if (!deliveriesResult.response.ok) {
-          setError(deliveriesResult.json?.error || "Failed to load deliveries");
-          setLoading(false);
-          return;
-        }
-        if (!settingsResult.response.ok) {
-          setError(settingsResult.json?.error || "Failed to load courier settings");
-          setLoading(false);
-          return;
-        }
-
-        setDeliveries(Array.isArray(deliveriesResult.json?.data) ? deliveriesResult.json.data : []);
+      .then(([deliveriesRes, settingsRes]) => {
+        setDeliveries(Array.isArray(deliveriesRes?.data) ? deliveriesRes.data : []);
         setCourierSettings(
-          Array.isArray(settingsResult.json?.data)
-            ? settingsResult.json.data.filter((item) => item.isActive)
+          Array.isArray(settingsRes?.data)
+            ? settingsRes.data.filter((item) => item.isActive)
             : []
         );
-        setLoading(false);
       })
-      .catch(() => {
-        setError("Failed to load deliveries");
-        setLoading(false);
-      });
+      .catch(() => setError("Failed to load deliveries"))
+      .finally(() => setLoading(false));
   }, []);
 
   function openSendModal(deliveryId) {
@@ -58,31 +41,23 @@ export default function DashboardDeliveriesPage() {
     if (defaultSetting) {
       setSelectedDeliveryId(deliveryId);
       setSelectedCourierType(defaultSetting.courierType);
-      setShowModal(false);
       setError("");
       setMessage("");
 
       fetch(`/api/delivery/send/${deliveryId}`, {
         method: "POST",
         headers: getCustomerHeaders(),
-        body: JSON.stringify({
-          courierType: defaultSetting.courierType,
-        }),
+        body: JSON.stringify({ courierType: defaultSetting.courierType }),
       })
-        .then((response) => response.json().then((json) => ({ response, json })))
-        .then(({ response, json }) => {
-          if (!response.ok) {
-            setError(json?.error || "Failed to send to courier");
-            return;
-          }
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.error) throw new Error(json.error);
           setDeliveries((state) =>
             state.map((delivery) => (delivery._id === json?.data?._id ? json.data : delivery))
           );
           setMessage(`Sent by default courier: ${defaultSetting.courierType}`);
         })
-        .catch(() => {
-          setError("Failed to send to courier");
-        });
+        .catch((err) => setError(err.message || "Failed to send to courier"));
       return;
     }
 
@@ -107,7 +82,6 @@ export default function DashboardDeliveriesPage() {
 
   function sendToCourier() {
     if (!selectedDeliveryId || !selectedCourierType) return;
-
     setSending(true);
     setError("");
     setMessage("");
@@ -115,28 +89,19 @@ export default function DashboardDeliveriesPage() {
     fetch(`/api/delivery/send/${selectedDeliveryId}`, {
       method: "POST",
       headers: getCustomerHeaders(),
-      body: JSON.stringify({
-        courierType: selectedCourierType,
-      }),
+      body: JSON.stringify({ courierType: selectedCourierType }),
     })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to send to courier");
-          setSending(false);
-          return;
-        }
-
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) throw new Error(json.error);
         setDeliveries((state) =>
           state.map((delivery) => (delivery._id === json?.data?._id ? json.data : delivery))
         );
         setMessage("Delivery sent to courier successfully.");
         closeModal();
       })
-      .catch(() => {
-        setError("Failed to send to courier");
-        setSending(false);
-      });
+      .catch((err) => setError(err.message || "Failed to send to courier"))
+      .finally(() => setSending(false));
   }
 
   function extractTrackingStatus(trackingPayload) {
@@ -159,14 +124,9 @@ export default function DashboardDeliveriesPage() {
       method: "POST",
       headers: getCustomerHeaders(),
     })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to fetch tracking");
-          setTrackingDeliveryId("");
-          return;
-        }
-
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) throw new Error(json.error);
         const nextTrackingId = json?.data?.trackingId;
         if (nextTrackingId) {
           setDeliveries((state) =>
@@ -175,125 +135,160 @@ export default function DashboardDeliveriesPage() {
             )
           );
         }
-
         const statusText = extractTrackingStatus(json?.data?.tracking);
-        const messageText = statusText
-          ? `Tracking status: ${statusText}`
-          : "Tracking data fetched successfully.";
-        setMessage(messageText);
-        setTrackingDeliveryId("");
+        setMessage(statusText ? `Tracking status: ${statusText}` : "Tracking data fetched successfully.");
       })
-      .catch(() => {
-        setError("Failed to fetch tracking");
-        setTrackingDeliveryId("");
-      });
+      .catch((err) => setError(err.message || "Failed to fetch tracking"))
+      .finally(() => setTrackingDeliveryId(""));
   }
-  return (
-    <CustomerDashboardShell title="Deliveries">
-      {message && <p className="mb-3 rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-      {loading ? (
-        <p className="text-sm text-zinc-500">Loading deliveries...</p>
-      ) : (
-        <div className="overflow-auto rounded border p-4">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead>
-              <tr className="bg-zinc-100 text-left">
-                <th className="border p-2">Customer</th>
-                <th className="border p-2">Phone</th>
-                <th className="border p-2">Address</th>
-                <th className="border p-2">COD</th>
-                <th className="border p-2">Status</th>
-                <th className="border p-2">Tracking</th>
-                <th className="border p-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {deliveries.map((delivery) => (
-                <tr key={delivery._id}>
-                  <td className="border p-2">{delivery.customerName}</td>
-                  <td className="border p-2">{delivery.customerPhone}</td>
-                  <td className="border p-2">{delivery.customerAddress}</td>
-                  <td className="border p-2">{delivery.codAmount}</td>
-                  <td className="border p-2 capitalize">{delivery.status}</td>
-                  <td className="border p-2">{delivery.trackingId || "-"}</td>
-                  <td className="border p-2">
-                    <div className="flex flex-wrap gap-2">
-                      {["pending", "failed"].includes(delivery.status) ? (
-                        <button
-                          type="button"
-                          onClick={() => openSendModal(delivery._id)}
-                          className="rounded bg-zinc-900 px-3 py-1 text-xs text-white"
-                        >
-                          Send to Courier
-                        </button>
-                      ) : null}
 
-                      {delivery.trackingId ? (
-                        <button
-                          type="button"
-                          onClick={() => trackDelivery(delivery._id)}
-                          disabled={trackingDeliveryId === delivery._id}
-                          className="rounded border border-zinc-300 px-3 py-1 text-xs text-zinc-700 disabled:opacity-60"
-                        >
-                          {trackingDeliveryId === delivery._id ? "Tracking..." : "Track"}
-                        </button>
-                      ) : null}
-
-                      {!["pending", "failed"].includes(delivery.status) && !delivery.trackingId ? (
-                        <span className="text-xs text-zinc-500">No action</span>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  const columns = [
+    { 
+      header: "Customer", 
+      accessor: "customerName",
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="font-bold text-slate-900">{row.customerName}</span>
+          <span className="text-xs text-slate-500">{row.customerPhone}</span>
         </div>
-      )}
+      )
+    },
+    { header: "Address", accessor: "customerAddress" },
+    { 
+      header: "COD", 
+      accessor: "codAmount",
+      render: (row) => <span className="font-bold text-slate-900">${row.codAmount}</span>
+    },
+    { 
+      header: "Status", 
+      accessor: "status",
+      render: (row) => (
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${
+          row.status === "pending" ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
+        }`}>
+          {row.status}
+        </span>
+      )
+    },
+    { 
+      header: "Tracking", 
+      accessor: "trackingId",
+      render: (row) => <span className="font-mono text-xs text-slate-500">{row.trackingId || "-"}</span>
+    },
+    { 
+      header: "Action", 
+      accessor: "_id",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          {["pending", "failed"].includes(row.status) && (
+            <button
+              onClick={() => openSendModal(row._id)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-700"
+            >
+              Send to Courier
+            </button>
+          )}
+          {row.trackingId && (
+            <button
+              onClick={() => trackDelivery(row._id)}
+              disabled={trackingDeliveryId === row._id}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-50"
+            >
+              {trackingDeliveryId === row._id ? "Tracking..." : "Track"}
+            </button>
+          )}
+          {!["pending", "failed"].includes(row.status) && !row.trackingId && (
+            <span className="text-xs text-slate-400">Ready</span>
+          )}
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Deliveries</h1>
+        <p className="mt-2 text-slate-500">Track and manage your courier shipments in real-time.</p>
+      </header>
+
+      <AnimatePresence mode="wait">
+        {message && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200"
+          >
+            {message}
+          </motion.div>
+        )}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200"
+          >
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <section>
+        <DataTable 
+          title="Active Shipments" 
+          subtitle="View and track all ongoing deliveries."
+          columns={columns} 
+          data={deliveries} 
+          emptyMessage="No shipments found. Your deliveries will appear here once created."
+        />
+      </section>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-5">
-            <h3 className="text-lg font-semibold">Send to Courier</h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              Default courier auto selected. You can change before send.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={closeModal} />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl"
+          >
+            <h3 className="text-xl font-bold text-slate-900">Choose Courier</h3>
+            <p className="mt-2 text-sm text-slate-500">Select a courier service to fulfill this delivery.</p>
 
-            <select
-              className="mt-4 w-full rounded border p-2"
-              value={selectedCourierType}
-              onChange={(event) => setSelectedCourierType(event.target.value)}
-            >
+            <div className="mt-6 space-y-3">
               {courierSettings.map((item) => (
-                <option key={item._id} value={item.courierType}>
-                  {item.courierType}
-                  {item.isDefault ? " (default)" : ""}
-                </option>
+                <button
+                  key={item._id}
+                  onClick={() => setSelectedCourierType(item.courierType)}
+                  className={`w-full flex items-center justify-between rounded-2xl border p-4 text-left transition-all ${
+                    selectedCourierType === item.courierType 
+                      ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/20" 
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div>
+                    <span className="block font-bold text-slate-900">{item.courierType}</span>
+                    {item.isDefault && <span className="text-[10px] font-bold uppercase text-indigo-600">Default Courier</span>}
+                  </div>
+                  <div className={`h-5 w-5 rounded-full border-2 transition-all ${
+                    selectedCourierType === item.courierType ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
+                  }`}>
+                    {selectedCourierType === item.courierType && (
+                      <svg className="h-full w-full text-white p-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+                    )}
+                  </div>
+                </button>
               ))}
-            </select>
+            </div>
 
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded border px-3 py-2 text-sm"
-                disabled={sending}
+            <div className="mt-8 flex gap-3">
+              <button onClick={closeModal} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button 
+                onClick={sendToCourier} disabled={sending}
+                className="flex-1 rounded-2xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-50"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={sendToCourier}
-                className="rounded bg-zinc-900 px-3 py-2 text-sm text-white disabled:opacity-60"
-                disabled={sending}
-              >
-                {sending ? "Sending..." : "Confirm Send"}
+                {sending ? "Sending..." : "Confirm"}
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
-    </CustomerDashboardShell>
+    </div>
   );
 }

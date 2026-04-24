@@ -32,8 +32,10 @@ export default function SuperAdminPackagesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("list"); // "list" or "create"
 
   async function loadPackages() {
+    setLoading(true);
     const response = await fetch("/api/packages");
     const json = await response.json();
     if (!response.ok) {
@@ -46,21 +48,7 @@ export default function SuperAdminPackagesPage() {
   }
 
   useEffect(() => {
-    fetch("/api/packages")
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.message || "Failed to load packages");
-          setLoading(false);
-          return;
-        }
-        setPackages(json?.packages || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load packages");
-        setLoading(false);
-      });
+    loadPackages();
   }, []);
 
   function startEdit(pkg) {
@@ -82,6 +70,8 @@ export default function SuperAdminPackagesPage() {
     });
     setMessage("");
     setError("");
+    setActiveTab("create");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function cancelEdit() {
@@ -89,6 +79,7 @@ export default function SuperAdminPackagesPage() {
     setForm(getEmptyForm());
     setMessage("");
     setError("");
+    setActiveTab("list");
   }
 
   async function handleSubmit(event) {
@@ -130,212 +121,232 @@ export default function SuperAdminPackagesPage() {
     setEditingPackageId("");
     setForm(getEmptyForm());
     setSubmitting(false);
-    setLoading(true);
+    
+    // Refresh packages and switch to list
     await loadPackages();
+    setTimeout(() => {
+        setActiveTab("list");
+        setMessage("");
+    }, 1500);
   }
 
   return (
-    <SuperAdminShell title="Packages">
-      <form onSubmit={handleSubmit} className="grid gap-3 rounded border p-4">
-        <h2 className="text-lg font-semibold">
-          {editingPackageId ? "Update Package" : "Create Package"}
-        </h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <input
-            className="rounded border p-2"
-            placeholder="Package name"
-            value={form.name}
-            onChange={(event) => setForm((state) => ({ ...state, name: event.target.value }))}
-            required
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Monthly price"
-            type="number"
-            min="0"
-            value={form.priceMonthly}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, priceMonthly: event.target.value }))
-            }
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Yearly price"
-            type="number"
-            min="0"
-            value={form.priceYearly}
-            onChange={(event) => setForm((state) => ({ ...state, priceYearly: event.target.value }))}
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Users limit"
-            type="number"
-            min="1"
-            value={form.users}
-            onChange={(event) => setForm((state) => ({ ...state, users: event.target.value }))}
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Orders/month limit"
-            type="number"
-            min="0"
-            value={form.ordersPerMonth}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, ordersPerMonth: event.target.value }))
-            }
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Courier orders/month limit"
-            type="number"
-            min="0"
-            value={form.courierOrdersPerMonth}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, courierOrdersPerMonth: event.target.value }))
-            }
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Emails/month limit"
-            type="number"
-            min="0"
-            value={form.emailsPerMonth}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, emailsPerMonth: event.target.value }))
-            }
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="Campaigns/month limit"
-            type="number"
-            min="0"
-            value={form.campaignsPerMonth}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, campaignsPerMonth: event.target.value }))
-            }
-          />
-          <input
-            className="rounded border p-2"
-            placeholder="WP promotions/month limit"
-            type="number"
-            min="0"
-            value={form.wpPromotionsPerMonth}
-            onChange={(event) =>
-              setForm((state) => ({ ...state, wpPromotionsPerMonth: event.target.value }))
-            }
-          />
-        </div>
-        <div className="grid gap-2">
-          <p className="text-sm font-medium text-zinc-700">Feature access</p>
-          <div className="grid gap-2 md:grid-cols-2">
-            {PACKAGE_FEATURES.map((feature) => (
-              <label
-                key={feature}
-                className="flex items-center gap-2 rounded border p-2 text-sm text-zinc-700"
-              >
-                <input
-                  type="checkbox"
-                  checked={Boolean(form.features?.[feature])}
-                  onChange={(event) =>
-                    setForm((state) => ({
-                      ...state,
-                      features: {
-                        ...state.features,
-                        [feature]: event.target.checked,
-                      },
-                    }))
-                  }
-                />
-                <span>{feature.replaceAll("_", " ")}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="w-fit rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-60"
-            type="submit"
-            disabled={submitting}
-          >
-            {submitting
-              ? editingPackageId
-                ? "Updating..."
-                : "Creating..."
-              : editingPackageId
-                ? "Update Package"
-                : "Create Package"}
-          </button>
-          {editingPackageId && (
-            <button
-              type="button"
-              className="w-fit rounded border border-zinc-300 px-4 py-2 text-zinc-700"
-              onClick={cancelEdit}
-              disabled={submitting}
-            >
-              Cancel Edit
-            </button>
-          )}
-        </div>
-        {message && <p className="rounded bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
-        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-      </form>
-
-      <div className="mt-6 rounded border p-4">
-        <h2 className="text-lg font-semibold">Package Table</h2>
-        {loading ? (
-          <p className="mt-3 text-sm text-zinc-500">Loading packages...</p>
-        ) : (
-          <div className="mt-3 overflow-auto">
-            <table className="w-full min-w-[680px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-100 text-left">
-                  <th className="border p-2">Name</th>
-                  <th className="border p-2">Monthly</th>
-                  <th className="border p-2">Yearly</th>
-                  <th className="border p-2">Users</th>
-                  <th className="border p-2">Orders/Month</th>
-                  <th className="border p-2">Courier/Month</th>
-                  <th className="border p-2">Emails/Month</th>
-                  <th className="border p-2">Campaigns/Month</th>
-                  <th className="border p-2">WP Promotions/Month</th>
-                  <th className="border p-2">Features</th>
-                  <th className="border p-2">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {packages.map((pkg) => (
-                  <tr key={pkg._id}>
-                    <td className="border p-2">{pkg.name}</td>
-                    <td className="border p-2">{pkg.priceMonthly}</td>
-                    <td className="border p-2">{pkg.priceYearly}</td>
-                    <td className="border p-2">{pkg?.limits?.users ?? "-"}</td>
-                    <td className="border p-2">{pkg?.limits?.orders_per_month ?? "-"}</td>
-                    <td className="border p-2">{pkg?.limits?.courier_orders_per_month ?? "-"}</td>
-                    <td className="border p-2">{pkg?.limits?.emails_per_month ?? "-"}</td>
-                    <td className="border p-2">{pkg?.limits?.campaigns_per_month ?? "-"}</td>
-                    <td className="border p-2">{pkg?.limits?.wp_promotions_per_month ?? "-"}</td>
-                    <td className="border p-2">
-                      {Object.entries(pkg?.features || {})
-                        .filter(([, enabled]) => enabled)
-                        .map(([feature]) => feature.replaceAll("_", " "))
-                        .join(", ") || "-"}
-                    </td>
-                    <td className="border p-2">
-                      <button
-                        type="button"
-                        className="rounded bg-zinc-900 px-3 py-1 text-xs text-white"
-                        onClick={() => startEdit(pkg)}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <SuperAdminShell title="Package Management">
+      {/* Tab Navigation */}
+      <div className="mb-8 flex gap-4 border-b pb-1">
+        <button
+          onClick={() => setActiveTab("list")}
+          className={`pb-3 text-sm font-bold tracking-tight transition-all outline-none ${
+            activeTab === "list"
+              ? "border-b-2 border-indigo-600 text-indigo-600"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          View All Packages
+        </button>
+        <button
+          onClick={() => setActiveTab("create")}
+          className={`pb-3 text-sm font-bold tracking-tight transition-all outline-none ${
+            activeTab === "create"
+              ? "border-b-2 border-indigo-600 text-indigo-600"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          {editingPackageId ? "Modify Configuration" : "Deploy New Tier"}
+        </button>
       </div>
+
+      {activeTab === "list" ? (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="rounded-3xl border bg-white shadow-sm overflow-hidden">
+            <div className="border-b p-8 bg-slate-50/50">
+              <h2 className="text-xl font-bold text-slate-900">Subscription Tiers</h2>
+              <p className="text-sm text-slate-500 mt-1">Review and manage your product offerings</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-8 py-5">Tier Identity</th>
+                    <th className="px-8 py-5 text-right">Pricing Structure</th>
+                    <th className="px-8 py-5">Resource Capacity</th>
+                    <th className="px-8 py-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan="4" className="px-8 py-20 text-center">
+                        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600"></div>
+                      </td>
+                    </tr>
+                  ) : packages.map((pkg) => (
+                    <tr key={pkg._id} className="group hover:bg-indigo-50/30 transition-colors">
+                      <td className="px-8 py-6">
+                        <div className="font-bold text-slate-900">{pkg.name}</div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {Object.entries(pkg?.features || {})
+                            .filter(([, enabled]) => enabled)
+                            .map(([feature]) => (
+                              <span key={feature} className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-bold uppercase tracking-tight">
+                                {feature.split('_')[0]}
+                              </span>
+                            ))}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="font-bold text-slate-900">{pkg.priceMonthly} <span className="text-[10px] text-slate-400 font-medium">/mo</span></div>
+                        <div className="text-xs text-slate-500 font-medium">{pkg.priceYearly} <span className="text-[10px] opacity-60">/yr</span></div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                          <div className="flex justify-between text-slate-500 gap-4"><span>Users:</span> <span className="font-bold text-slate-900">{pkg?.limits?.users ?? "-"}</span></div>
+                          <div className="flex justify-between text-slate-500 gap-4"><span>Orders:</span> <span className="font-bold text-slate-900">{pkg?.limits?.orders_per_month ?? "-"}</span></div>
+                          <div className="flex justify-between text-slate-500 gap-4"><span>Emails:</span> <span className="font-bold text-slate-900">{pkg?.limits?.emails_per_month ?? "-"}</span></div>
+                          <div className="flex justify-between text-slate-500 gap-4"><span>Promos:</span> <span className="font-bold text-slate-900">{pkg?.limits?.wp_promotions_per_month ?? "-"}</span></div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <button
+                          onClick={() => startEdit(pkg)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-all hover:bg-indigo-600 hover:text-white shadow-sm"
+                        >
+                          ✎
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl">
+          <div className="rounded-3xl border bg-white shadow-xl shadow-slate-200/50 p-10">
+            <h2 className="text-2xl font-bold text-slate-900">
+              {editingPackageId ? "Modify Configuration" : "Tier Architecture"}
+            </h2>
+            <p className="text-sm text-slate-500 mt-2">Define the core parameters and feature accessibility for this tier</p>
+
+            {message && <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-600 border border-emerald-100">{message}</div>}
+            {error && <div className="mt-6 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600 border border-red-100">{error}</div>}
+
+            <form onSubmit={handleSubmit} className="mt-10 space-y-8">
+              <div className="grid gap-8 md:grid-cols-2">
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1">Package Name</label>
+                    <input
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-bold outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+                      placeholder="e.g. Enterprise Pro"
+                      value={form.name}
+                      onChange={(event) => setForm((state) => ({ ...state, name: event.target.value }))}
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1">Monthly Price</label>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-bold outline-none transition-all focus:border-indigo-500 focus:bg-white"
+                        type="number"
+                        min="0"
+                        value={form.priceMonthly}
+                        onChange={(event) => setForm((state) => ({ ...state, priceMonthly: event.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1">Yearly Price</label>
+                      <input
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-bold outline-none transition-all focus:border-indigo-500 focus:bg-white"
+                        type="number"
+                        min="0"
+                        value={form.priceYearly}
+                        onChange={(event) => setForm((state) => ({ ...state, priceYearly: event.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 block mb-4">Capacity Limits</label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { label: "Users", key: "users" },
+                        { label: "Orders", key: "ordersPerMonth" },
+                        { label: "Emails", key: "emailsPerMonth" },
+                        { label: "Promos", key: "wpPromotionsPerMonth" },
+                      ].map((limit) => (
+                        <div key={limit.key}>
+                          <div className="text-[10px] font-bold text-slate-500 mb-1.5">{limit.label}</div>
+                          <input
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold outline-none focus:border-indigo-500"
+                            type="number"
+                            min="1"
+                            value={form[limit.key]}
+                            onChange={(event) => setForm((state) => ({ ...state, [limit.key]: event.target.value }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 block">Feature Accessibility</label>
+                  <div className="grid gap-3">
+                    {PACKAGE_FEATURES.map((feature) => (
+                      <label
+                        key={feature}
+                        className={`flex items-center justify-between rounded-2xl border p-4 transition-all cursor-pointer ${
+                          form.features?.[feature] 
+                            ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                            : "bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-100/50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-black uppercase tracking-wider">{feature.replaceAll("_", " ")}</span>
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 rounded border-slate-300 text-indigo-600 accent-indigo-400"
+                          checked={Boolean(form.features?.[feature])}
+                          onChange={(event) =>
+                            setForm((state) => ({
+                              ...state,
+                              features: {
+                                ...state.features,
+                                [feature]: event.target.checked,
+                              },
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 border-t pt-10">
+                <button
+                  className="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 py-4 text-sm font-bold text-white shadow-xl shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                  type="submit"
+                  disabled={submitting}
+                >
+                  {submitting ? "Processing..." : editingPackageId ? "Apply Configuration" : "Deploy Tier"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-8 py-4 text-sm font-bold text-slate-500 transition-all hover:bg-slate-100"
+                  onClick={cancelEdit}
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </SuperAdminShell>
   );
 }

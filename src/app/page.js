@@ -1,6 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import Navbar from "@/components/landing/Navbar";
+import Hero from "@/components/landing/Hero";
+import Features from "@/components/landing/Features";
+import HowItWorks from "@/components/landing/HowItWorks";
+import Integrations from "@/components/landing/Integrations";
+import Pricing from "@/components/landing/Pricing";
+import Support from "@/components/landing/Support";
+import RegistrationForm from "@/components/landing/RegistrationForm";
+import Footer from "@/components/landing/Footer";
+import ScrollReveal from "@/components/landing/ScrollReveal";
 
 export default function Home() {
   const [packages, setPackages] = useState([]);
@@ -8,6 +19,7 @@ export default function Home() {
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [billingCycle, setBillingCycle] = useState("yearly");
   const [companySubmitting, setCompanySubmitting] = useState(false);
   const [companyForm, setCompanyForm] = useState({
     companyName: "",
@@ -16,20 +28,48 @@ export default function Home() {
     password: "",
   });
 
+  const formRef = useRef(null);
+
+  const router = useRouter();
+
   useEffect(() => {
+    async function checkAuthAndRedirect() {
+      // Check super admin first
+      const saToken = window.localStorage.getItem("super_admin_token");
+      if (saToken === "hardcoded-super-admin-token") {
+        router.replace("/super-admin/packages");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          // User is logged in, redirect to dashboard
+          router.replace("/dashboard");
+        }
+      } catch (err) {
+        console.error("Auth check failed", err);
+      }
+    }
+    checkAuthAndRedirect();
+
     async function loadPackages() {
-      const res = await fetch("/api/packages");
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json?.message || "Package load failed");
-      } else {
-        const list = json?.packages || [];
-        setPackages(list);
+      try {
+        const res = await fetch("/api/packages");
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json?.message || "Package load failed");
+        } else {
+          setPackages(json?.packages || []);
+        }
+      } catch (err) {
+        setError("Failed to connect to the server.");
       }
       setLoadingPackages(false);
     }
     loadPackages();
-  }, []);
+  }, [router]);
 
   async function handleCompanyRegister(event) {
     event.preventDefault();
@@ -56,125 +96,69 @@ export default function Home() {
         phone: "",
         password: "",
       });
+      setSelectedPackageId("");
     }
     setCompanySubmitting(false);
   }
 
+  const handleSelectPackage = (pkgId) => {
+    setSelectedPackageId(pkgId);
+    setSuccess("");
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
+
   return (
-    <main className="min-h-screen bg-zinc-50 p-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <section>
-          <h1 className="text-3xl font-semibold">Smart Growth Manager</h1>
-          <p className="mt-2 text-zinc-600">
-            Choose a package, register your company, then create users.
-          </p>
-        </section>
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100">
+      <Navbar />
 
-        {error && <p className="rounded border border-red-200 bg-red-50 p-3">{error}</p>}
-        {success && (
-          <p className="rounded border border-emerald-200 bg-emerald-50 p-3">{success}</p>
-        )}
+      <main>
+        <Hero />
+        <ScrollReveal delay={0.1}>
+          <Features />
+        </ScrollReveal>
+        <ScrollReveal direction="left" delay={0.2}>
+          {/* <HowItWorks /> */}
+        </ScrollReveal>
+        <ScrollReveal direction="right" delay={0.2}>
+          <Integrations />
+        </ScrollReveal>
+        <ScrollReveal delay={0.1}>
+          <Pricing
+            packages={packages}
+            loadingPackages={loadingPackages}
+            billingCycle={billingCycle}
+            setBillingCycle={setBillingCycle}
+            handleSelectPackage={handleSelectPackage}
+          />
+        </ScrollReveal>
+        <ScrollReveal delay={0.1}>
+          <Support />
+        </ScrollReveal>
+        <ScrollReveal delay={0.1}>
+          <RegistrationForm
+            selectedPackageId={selectedPackageId}
+            setSelectedPackageId={setSelectedPackageId}
+            packages={packages}
+            error={error}
+            success={success}
+            companySubmitting={companySubmitting}
+            companyForm={companyForm}
+            setCompanyForm={setCompanyForm}
+            handleCompanyRegister={handleCompanyRegister}
+            formRef={formRef}
+          />
+        </ScrollReveal>
+      </main>
 
-        <section className="rounded border bg-white p-5">
-          <h2 className="text-xl font-semibold">Packages</h2>
-          {loadingPackages && <p className="mt-3 text-sm text-zinc-500">Loading packages...</p>}
-          {!loadingPackages && packages.length === 0 && (
-            <p className="mt-3 text-sm text-zinc-500">No package found.</p>
-          )}
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {packages.map((pkg) => (
-              <button
-                key={pkg._id}
-                type="button"
-                className={`rounded-xl border p-4 text-left shadow-sm transition ${
-                  selectedPackageId === pkg._id
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-200 bg-white hover:border-zinc-400"
-                }`}
-                onClick={() => {
-                  setSelectedPackageId(pkg._id);
-                  setSuccess("");
-                }}
-              >
-                <p className="text-lg font-semibold">{pkg.name}</p>
-                <p className="mt-2 text-sm">
-                  Monthly: {pkg.priceMonthly} | Yearly: {pkg.priceYearly}
-                </p>
-                <div className="mt-3 space-y-1 text-xs">
-                  <p>Users: {pkg?.limits?.users ?? 0}</p>
-                  <p>Orders/mo: {pkg?.limits?.orders_per_month ?? 0}</p>
-                  <p>Courier/mo: {pkg?.limits?.courier_orders_per_month ?? 0}</p>
-                  <p>Emails/mo: {pkg?.limits?.emails_per_month ?? 0}</p>
-                  <p>Campaigns/mo: {pkg?.limits?.campaigns_per_month ?? 0}</p>
-                </div>
-                <p className="mt-3 text-xs">
-                  Features:{" "}
-                  {Object.entries(pkg?.features || {})
-                    .filter(([, enabled]) => enabled)
-                    .map(([feature]) => feature.replaceAll("_", " "))
-                    .join(", ") || "None"}
-                </p>
-              </button>
-            ))}
-          </div>
-        </section>
+      <Footer />
 
-        {selectedPackageId && (
-          <section>
-            <form className="rounded border bg-white p-5" onSubmit={handleCompanyRegister}>
-              <h2 className="text-xl font-semibold">Company Registration</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Selected package ready. Now create your company.
-              </p>
-              <div className="mt-4 grid gap-3">
-                <input
-                  className="rounded border p-2"
-                  placeholder="Company Name"
-                  value={companyForm.companyName}
-                  onChange={(e) =>
-                    setCompanyForm((state) => ({ ...state, companyName: e.target.value }))
-                  }
-                  required
-                />
-                <input
-                  className="rounded border p-2"
-                  placeholder="Gmail"
-                  type="email"
-                  value={companyForm.companyEmail}
-                  onChange={(e) =>
-                    setCompanyForm((state) => ({ ...state, companyEmail: e.target.value }))
-                  }
-                  required
-                />
-                <input
-                  className="rounded border p-2"
-                  placeholder="Password"
-                  type="password"
-                  value={companyForm.password}
-                  onChange={(e) =>
-                    setCompanyForm((state) => ({ ...state, password: e.target.value }))
-                  }
-                  required
-                />
-                <input
-                  className="rounded border p-2"
-                  placeholder="Phone Number"
-                  value={companyForm.phone}
-                  onChange={(e) => setCompanyForm((state) => ({ ...state, phone: e.target.value }))}
-                  required
-                />
-                <button
-                  type="submit"
-                  className="rounded bg-zinc-900 px-4 py-2 text-white disabled:opacity-60"
-                  disabled={companySubmitting}
-                >
-                  {companySubmitting ? "Registering..." : "Register Company"}
-                </button>
-              </div>
-            </form>
-          </section>
-        )}
-      </div>
-    </main>
+      <style jsx global>{`
+        html {
+          scroll-behavior: smooth;
+        }
+      `}</style>
+    </div>
   );
 }

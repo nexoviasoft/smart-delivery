@@ -4,10 +4,10 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import * as XLSX from "xlsx";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
 import RichTextEditor from "@/components/rich-text-editor";
 import { normalizePhoneDigits } from "@/lib/wp/phone";
+import { motion, AnimatePresence } from "framer-motion";
 
 function renderTemplatePreview({ templateText, templateLink, name }) {
   let message = String(templateText || "");
@@ -19,10 +19,7 @@ function renderTemplatePreview({ templateText, templateLink, name }) {
 }
 
 function renderTemplatePreviewHtml(message) {
-  const escaped = String(message || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  const escaped = String(message || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   return escaped
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/__(.+?)__/g, "<u>$1</u>")
@@ -38,21 +35,15 @@ function WpPromotionsPageContent() {
   const [loadingUsage, setLoadingUsage] = useState(true);
   const [error, setError] = useState("");
   const [usageData, setUsageData] = useState(null);
-
-  // Legacy usage-only flow (keep it available when no draftId).
   const [count, setCount] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
-
-  // Draft flow (selected leads -> WP Promotions)
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftCampaignName, setDraftCampaignName] = useState("");
   const [recipients, setRecipients] = useState([]);
-
   const [templateText, setTemplateText] = useState("Hi {{name}}! Your offer is ready. {{link}}");
   const [templateLink, setTemplateLink] = useState("");
-
   const intervalSeconds = 30;
   const [jobId, setJobId] = useState("");
   const [sendLogs, setSendLogs] = useState([]);
@@ -60,733 +51,306 @@ function WpPromotionsPageContent() {
   const [waConnected, setWaConnected] = useState(false);
   const [waQrDataUrl, setWaQrDataUrl] = useState("");
   const [waLastError, setWaLastError] = useState("");
-  const [activeTab, setActiveTab] = useState("connect");
+  const [activeTab, setActiveTab] = useState("bulk");
   const [jobState, setJobState] = useState({
-    status: "",
-    currentIndex: 0,
-    sentCount: 0,
-    total: 0,
-    nextRunAt: null,
-    lastError: "",
-    lastWaLink: "",
+    status: "", currentIndex: 0, sentCount: 0, total: 0, nextRunAt: null, lastError: "", lastWaLink: ""
   });
   const timerRef = useRef(null);
 
   async function loadUsage() {
-    setError("");
-    setLoadingUsage(true);
     try {
-      const response = await fetch("/api/usage/me", { headers: getCustomerHeaders() });
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setError(json?.error || "Failed to load usage data");
-        return;
-      }
-
-      setUsageData(json?.data || null);
-    } catch {
-      setError("Failed to load usage data");
-    } finally {
-      setLoadingUsage(false);
-    }
+      const res = await fetch("/api/usage/me", { headers: getCustomerHeaders() });
+      const json = await res.json();
+      if (res.ok) setUsageData(json?.data || null);
+    } catch { setError("Failed to load usage data"); }
+    finally { setLoadingUsage(false); }
   }
 
-  useEffect(() => {
-    loadUsage();
-  }, []);
+  useEffect(() => { loadUsage(); }, []);
 
   useEffect(() => {
     let mounted = true;
-
     async function loadWaStatus() {
       try {
-        const response = await fetch("/api/wp-promotions/whatsapp/status");
-        const json = await response.json().catch(() => ({}));
+        const res = await fetch("/api/wp-promotions/whatsapp/status");
+        const json = await res.json();
         if (!mounted) return;
         setWaConnected(Boolean(json?.data?.connected));
         setWaQrDataUrl(json?.data?.lastQrDataUrl || "");
         setWaLastError(json?.data?.lastError || "");
-      } catch {
-        if (!mounted) return;
-        setWaLastError("Failed to load WhatsApp status");
-      }
+      } catch { if (mounted) setWaLastError("Failed to load WhatsApp status"); }
     }
-
     loadWaStatus();
     const t = setInterval(loadWaStatus, 10000);
-    return () => {
-      mounted = false;
-      clearInterval(t);
-    };
+    return () => { mounted = false; clearInterval(t); };
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
     if (!draftId) {
-      setRecipients([]);
-      setDraftCampaignName("");
-      setJobId("");
-      setSendLogs([]);
-      setJobState({
-        status: "",
-        currentIndex: 0,
-        sentCount: 0,
-        total: 0,
-        nextRunAt: null,
-        lastError: "",
-        lastWaLink: "",
-      });
+      setRecipients([]); setDraftCampaignName(""); setJobId(""); setSendLogs([]);
+      setJobState({ status: "", currentIndex: 0, sentCount: 0, total: 0, nextRunAt: null, lastError: "", lastWaLink: "" });
       return;
     }
-
     setDraftLoading(true);
-    setError("");
-    setRecipients([]);
-    setDraftCampaignName("");
-    setJobId("");
-    setSendLogs([]);
-    setJobState({
-      status: "",
-      currentIndex: 0,
-      sentCount: 0,
-      total: 0,
-      nextRunAt: null,
-      lastError: "",
-      lastWaLink: "",
-    });
-
     fetch(`/api/wp-promotions/draft/${draftId}`, { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load WP draft");
-          setDraftLoading(false);
-          return;
-        }
+      .then(r => r.json())
+      .then(json => {
         const data = json?.data || {};
         setDraftCampaignName(data?.campaignName || "");
         setRecipients(Array.isArray(data?.recipients) ? data.recipients : []);
-        setDraftLoading(false);
       })
-      .catch(() => {
-        setError("Failed to load WP draft");
-        setDraftLoading(false);
-      });
+      .finally(() => setDraftLoading(false));
   }, [draftId]);
 
-  async function handleExcelUploadFile(file) {
+  async function handleExcelUpload(file) {
     if (!file) return;
-    setError("");
-
     setExcelUploading(true);
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
-      const sheetName = workbook.SheetNames?.[0];
-      if (!sheetName) {
-        setError("Excel sheet not found.");
-        return;
-      }
-
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      if (!Array.isArray(rows) || !rows.length) {
-        setError("Excel rows not found.");
-        return;
-      }
-
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
       const keys = Object.keys(rows[0] || {});
-      const norm = (s) => String(s || "").toLowerCase().trim().replace(/\s+/g, " ");
-
-      const nameSyn = ["name", "full name", "customer name", "lead name", "recipient name"];
-      const phoneSyn = ["phone", "mobile", "number", "msisdn", "whatsapp", "contact"];
-
-      function pickKey(synList) {
-        const lowerKeys = keys.map((k) => ({ raw: k, n: norm(k) }));
-        for (const syn of synList) {
-          const exact = lowerKeys.find((k) => k.n === norm(syn));
-          if (exact) return exact.raw;
-        }
-        for (const syn of synList) {
-          const partial = lowerKeys.find((k) => k.n.includes(norm(syn)));
-          if (partial) return partial.raw;
-        }
-        return "";
-      }
-
-      const nameKey = pickKey(nameSyn);
-      const phoneKey = pickKey(phoneSyn);
-
-      if (!nameKey || !phoneKey) {
-        setError("Excel must have columns for Name and Phone. Headers like Name/Phone work best.");
-        return;
-      }
-
-      const recipients = [];
-      for (const r of rows) {
-        const rawName = String(r?.[nameKey] || "").trim().slice(0, 120);
-        const rawPhone = String(r?.[phoneKey] || "");
-        const phone = normalizePhoneDigits(rawPhone);
-        if (!phone) continue;
-        recipients.push({ name: rawName, phone });
-        if (recipients.length > 5000) break;
-      }
-
-      if (!recipients.length) {
-        setError("No valid recipients found in Excel (phone missing).");
-        return;
-      }
-
-      const response = await fetch("/api/wp-promotions/draft/from-recipients", {
+      const nameKey = keys.find(k => /name/i.test(k));
+      const phoneKey = keys.find(k => /phone|mobile|number/i.test(k));
+      if (!nameKey || !phoneKey) throw new Error("Excel must have Name and Phone columns.");
+      const cleaned = rows.map(r => ({ name: String(r[nameKey]).trim(), phone: normalizePhoneDigits(r[phoneKey]) })).filter(r => r.phone);
+      const res = await fetch("/api/wp-promotions/draft/from-recipients", {
         method: "POST",
         headers: getCustomerHeaders(),
-        body: JSON.stringify({ recipients }),
+        body: JSON.stringify({ recipients: cleaned }),
       });
-
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(json?.error || "Failed to create WP draft from Excel.");
-        return;
-      }
-
-      const newDraftId = json?.data?.draftId;
-      if (!newDraftId) {
-        setError("draftId missing from response");
-        return;
-      }
-
-      router.push(`/dashboard/wp-promotions?draftId=${newDraftId}`);
-    } catch {
-      setError("Failed to upload/parse Excel.");
-    } finally {
-      setExcelUploading(false);
-    }
-  }
-
-  async function handleAddPromotion(event) {
-    event.preventDefault();
-    setSubmitError("");
-    setSubmitSuccess("");
-
-    const countNumber = Number(count);
-    if (!Number.isFinite(countNumber) || countNumber < 1) {
-      setSubmitError("count must be a positive number");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/wp-promotions", {
-        method: "POST",
-        headers: getCustomerHeaders(),
-        body: JSON.stringify({ count: countNumber }),
-      });
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setSubmitError(json?.error || "Failed to add WP promotion");
-        return;
-      }
-
-      setSubmitSuccess(`Added ${json?.data?.incrementedBy ?? countNumber} WP promotions`);
-      setCount(1);
-      await loadUsage();
-    } catch {
-      setSubmitError("Failed to add WP promotion");
-    } finally {
-      setSubmitting(false);
-    }
+      const json = await res.json();
+      if (json.data?.draftId) router.push(`/dashboard/wp-promotions?draftId=${json.data.draftId}`);
+    } catch (err) { setError(err.message); }
+    finally { setExcelUploading(false); }
   }
 
   async function runJobOnce(activeJobId) {
     if (!activeJobId) return;
-    const response = await fetch(`/api/wp-promotions/jobs/${activeJobId}/run`, {
-      method: "POST",
-      headers: getCustomerHeaders(),
-    });
-    const json = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setJobState((state) => ({
-        ...state,
-        status: "failed",
-        lastError: json?.error || "Run failed",
-      }));
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      return;
-    }
-
+    const res = await fetch(`/api/wp-promotions/jobs/${activeJobId}/run`, { method: "POST", headers: getCustomerHeaders() });
+    const json = await res.json();
     const data = json?.data || {};
-    if (data?.lastLog) {
-      setSendLogs((prev) => [...prev, data.lastLog].slice(-200));
-    }
-
-    setJobState((state) => ({
-      ...state,
-      status: data?.status || "",
-      currentIndex: Number(data?.currentIndex || 0),
-      sentCount: Number(data?.sentCount || 0),
-      total: Number(data?.total || state.total || recipients?.length || 0),
-      nextRunAt: data?.nextRunAt || null,
-      lastError: data?.lastError || "",
-      lastWaLink: data?.lastWaLink || "",
-    }));
-
+    if (data?.lastLog) setSendLogs(prev => [...prev, data.lastLog].slice(-200));
+    setJobState(s => ({ ...s, ...data }));
     if (data?.status === "completed" || data?.status === "failed") {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
       setJobId("");
-      // Refresh usage after completion.
-      await loadUsage();
+      loadUsage();
     }
   }
 
   async function handleBulkSend() {
-    setError("");
-    setSubmitError("");
-    setSubmitSuccess("");
-
-    if (!draftId) {
-      setError("Select leads first from Leads page.");
-      return;
-    }
-
-    if (!recipients.length) {
-      setError("No recipients found in this draft.");
-      return;
-    }
-
-    if (!templateText.trim()) {
-      setError("Message text is required.");
-      return;
-    }
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
+    if (!draftId || !recipients.length || !templateText.trim()) return;
     try {
-      const response = await fetch("/api/wp-promotions/jobs", {
+      const res = await fetch("/api/wp-promotions/jobs", {
         method: "POST",
         headers: getCustomerHeaders(),
-        body: JSON.stringify({
-          draftId,
-          templateText,
-          templateLink,
-          intervalSeconds,
-        }),
+        body: JSON.stringify({ draftId, templateText, templateLink, intervalSeconds }),
       });
-
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(json?.error || "Failed to start bulk send");
-        return;
+      const json = await res.json();
+      if (json.data?.jobId) {
+        setJobId(json.data.jobId);
+        setSendLogs([]);
+        setJobState({ status: "running", currentIndex: 0, sentCount: 0, total: recipients.length, nextRunAt: null, lastError: "", lastWaLink: "" });
+        timerRef.current = setInterval(() => runJobOnce(json.data.jobId), intervalSeconds * 1000);
+        runJobOnce(json.data.jobId);
       }
-
-      const newJobId = json?.data?.jobId;
-      if (!newJobId) {
-        setError("jobId missing from response");
-        return;
-      }
-      setJobId(newJobId);
-      setSendLogs([]);
-      setJobState({
-        status: "running",
-        currentIndex: 0,
-        sentCount: 0,
-        total: recipients.length,
-        nextRunAt: null,
-        lastError: "",
-        lastWaLink: "",
-      });
-
-      timerRef.current = setInterval(() => runJobOnce(newJobId), intervalSeconds * 1000);
-      await runJobOnce(newJobId); // returns "waiting" until nextRunAt
-    } catch {
-      setError("Failed to start bulk send");
-    }
+    } catch { setError("Failed to start bulk send"); }
   }
 
   const used = Number(usageData?.usage?.wpPromotions || 0);
   const limit = Number(usageData?.limits?.wp_promotions_per_month || 0);
   const remaining = Math.max(0, limit - used);
-
-  const showDraftUI = Boolean(draftId);
-  const previewRecipient = recipients?.[0] || { name: "" };
-  const previewMessage = useMemo(
-    () => renderTemplatePreview({ templateText, templateLink, name: previewRecipient?.name }),
-    [templateText, templateLink, previewRecipient?.name]
-  );
-  const previewMessageHtml = useMemo(() => renderTemplatePreviewHtml(previewMessage), [previewMessage]);
+  const previewMessage = renderTemplatePreview({ templateText, templateLink, name: recipients[0]?.name || "Customer" });
 
   return (
-    <CustomerDashboardShell title="WP Promotions">
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">WhatsApp Promotions</h1>
+          <p className="mt-2 text-slate-500">Automate your outreach with high-converting WA messages.</p>
+        </div>
+        <div className="flex gap-2 rounded-2xl bg-slate-100 p-1.5">
+          <button onClick={() => setActiveTab("bulk")} className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${activeTab === "bulk" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>Bulk Send</button>
+          <button onClick={() => setActiveTab("connect")} className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${activeTab === "connect" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>WhatsApp Connect</button>
+        </div>
+      </header>
 
-      {loadingUsage ? (
-        <p className="text-sm text-zinc-500">Loading WP promotions usage...</p>
-      ) : (
-        <div className="grid gap-4">
-          <div className="rounded border p-3">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab("connect")}
-                className={`rounded px-3 py-2 text-sm font-medium ${
-                  activeTab === "connect" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-800"
-                }`}
-              >
-                Connect WP
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("bulk")}
-                className={`rounded px-3 py-2 text-sm font-medium ${
-                  activeTab === "bulk" ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-800"
-                }`}
-              >
-                Bulk Send
-              </button>
-            </div>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200">
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        {[
+          { label: "Used", val: used, color: "text-slate-900" },
+          { label: "Limit", val: limit, color: "text-slate-900" },
+          { label: "Remaining", val: remaining, color: "text-indigo-600" }
+        ].map((s, i) => (
+          <div key={i} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</span>
+            <p className={`mt-1 text-3xl font-bold ${s.color}`}>{s.val}</p>
           </div>
+        ))}
+      </section>
 
-          <div className="rounded border p-4">
-            <p className="text-sm text-zinc-500">Current month</p>
-            <p className="mt-1 text-xl font-semibold">{usageData?.month || "-"}</p>
+      {activeTab === "connect" ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-8">
+          <div className="flex items-center gap-3">
+            <div className={`h-3 w-3 rounded-full ${waConnected ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+            <h2 className="text-xl font-bold text-slate-900">{waConnected ? "WhatsApp Connected" : "Connect WhatsApp"}</h2>
           </div>
-
-          <div className="grid gap-3 rounded border p-4 sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-zinc-500">Used</p>
-              <p className="text-2xl font-semibold">{used}</p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Limit</p>
-              <p className="text-2xl font-semibold">{limit}</p>
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500">Remaining</p>
-              <p className="text-2xl font-semibold">{remaining}</p>
-            </div>
-          </div>
-
-          {activeTab === "connect" ? (
-            <div className="rounded border p-4">
-              <h2 className="text-sm font-semibold text-zinc-700">WhatsApp Web connection</h2>
-              <p className="mt-1 text-xs text-zinc-500">
-                Status: {waConnected ? "Connected" : "Not connected (QR needed)"}
-              </p>
-
-              {!waConnected ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-[1fr_240px]">
-                  <div>
-                    <p className="text-xs text-zinc-600">
-                      Scan QR once. After connecting, the same session will persist in <code>.wa-session</code>.
-                    </p>
-                    {waLastError ? (
-                      <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{waLastError}</p>
-                    ) : null}
-                  </div>
-                  {waQrDataUrl ? (
-                    <div className="flex items-center justify-center rounded border bg-white p-2">
-                      <Image
-                        src={waQrDataUrl}
-                        alt="WhatsApp QR"
-                        width={192}
-                        height={192}
-                        className="h-48 w-48"
-                      />
+          {!waConnected && (
+            <div className="mt-8 grid gap-12 lg:grid-cols-2">
+              <div className="space-y-6">
+                <p className="text-slate-500">Scan the QR code with your WhatsApp app to enable automated messaging.</p>
+                <div className="space-y-4">
+                  {[
+                    "Open WhatsApp on your phone",
+                    "Tap Menu or Settings and select Linked Devices",
+                    "Tap on Link a Device",
+                    "Point your phone to this screen to capture the code"
+                  ].map((step, i) => (
+                    <div key={i} className="flex gap-4">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-600">{i + 1}</span>
+                      <p className="text-sm font-medium text-slate-700">{step}</p>
                     </div>
-                  ) : (
-                    <p className="text-xs text-zinc-500">Waiting for QR...</p>
-                  )}
+                  ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {activeTab === "bulk" && showDraftUI ? (
-            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <div className="rounded border p-4">
-                <h2 className="mb-1 text-sm font-semibold text-zinc-700">Recipients</h2>
-                <p className="text-sm text-zinc-500">
-                  {draftLoading
-                    ? "Loading..."
-                    : `${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`}
-                  {draftCampaignName ? ` • ${draftCampaignName}` : ""}
-                </p>
-
-                {draftLoading ? (
-                  <p className="mt-3 text-sm text-zinc-500">Loading recipients...</p>
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-12">
+                {waQrDataUrl ? (
+                  <div className="rounded-2xl bg-white p-4 shadow-xl ring-1 ring-slate-200">
+                    <Image src={waQrDataUrl} alt="WhatsApp QR" width={240} height={240} className="h-60 w-60" />
+                  </div>
                 ) : (
-                  <div className="mt-3 overflow-auto">
-                    <table className="w-full min-w-[420px] border-collapse text-sm">
-                      <thead>
-                        <tr className="bg-zinc-50 text-left">
-                          <th className="border p-2">Name</th>
-                          <th className="border p-2">Phone</th>
-                        </tr>
+                  <div className="text-center">
+                    <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+                    <p className="mt-4 text-sm font-bold text-slate-500">Generating QR Code...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (
+        <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
+          <div className="space-y-8">
+            <section className="rounded-3xl border border-slate-200 bg-white p-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-900">1. Select Recipients</h2>
+                {draftId && <button onClick={() => router.push("/dashboard/leads")} className="text-xs font-bold text-indigo-600 hover:underline">Change Draft</button>}
+              </div>
+              {!draftId ? (
+                <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-100 bg-slate-50/50 p-12 text-center">
+                  <p className="text-sm font-medium text-slate-500">No recipients selected. Upload an excel or select from leads.</p>
+                  <label className="mt-4 cursor-pointer rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-black">
+                    {excelUploading ? "Processing..." : "Upload Excel"}
+                    <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={(e) => handleExcelUpload(e.target.files?.[0])} disabled={excelUploading} />
+                  </label>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center gap-3 rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-200">
+                    <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-indigo-600 text-white font-bold">{recipients.length}</div>
+                    <div>
+                      <p className="text-sm font-bold text-indigo-900">{draftCampaignName || "Selected Leads"}</p>
+                      <p className="text-xs text-indigo-600">Ready to send</p>
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-auto rounded-xl border border-slate-100 bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
+                        <tr><th className="px-4 py-2">Name</th><th className="px-4 py-2">Phone</th></tr>
                       </thead>
-                      <tbody>
-                        {recipients.slice(0, 25).map((r) => (
-                          <tr key={String(r.leadId || `${r.phone}-${r.name}`)}>
-                            <td className="border p-2">{r.name || "-"}</td>
-                            <td className="border p-2">{r.phone}</td>
-                          </tr>
-                        ))}
-                        {recipients.length > 25 ? (
-                          <tr>
-                            <td className="border p-2 text-sm text-zinc-500" colSpan={2}>
-                              Showing first 25. Total: {recipients.length}
-                            </td>
-                          </tr>
-                        ) : null}
+                      <tbody className="divide-y divide-slate-50">
+                        {recipients.slice(0, 10).map((r, i) => <tr key={i}><td className="px-4 py-2">{r.name}</td><td className="px-4 py-2 font-mono">{r.phone}</td></tr>)}
                       </tbody>
                     </table>
                   </div>
-                )}
+                </div>
+              )}
+            </section>
 
-                <div className="mt-4 rounded border bg-zinc-50 p-3">
-                  <h3 className="text-sm font-semibold text-zinc-800">Template</h3>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Use placeholders: <code>{"{{name}}"}</code> and <code>{"{{link}}"}</code>.
-                  </p>
+            <section className="rounded-3xl border border-slate-200 bg-white p-8">
+              <h2 className="text-xl font-bold text-slate-900">2. Compose Message</h2>
+              <div className="mt-6 space-y-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Message Template</label>
+                  <RichTextEditor value={templateText} onChange={setTemplateText} outputMode="text" minHeight={200} disabled={!!jobId} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Action Link (Optional)</label>
+                  <input className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-600" value={templateLink} onChange={e => setTemplateLink(e.target.value)} placeholder="https://..." disabled={!!jobId} />
+                </div>
+                <button 
+                  onClick={handleBulkSend} disabled={!draftId || !waConnected || !!jobId}
+                  className="w-full rounded-2xl bg-indigo-600 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                >
+                  {jobId ? "Send in Progress..." : "Start Bulk Send"}
+                </button>
+              </div>
+            </section>
+          </div>
 
-                  <div className="mt-3 grid gap-3">
-                    <label className="grid gap-1 text-xs text-zinc-600">
-                      Message text
-                      <RichTextEditor
-                        value={templateText}
-                        onChange={setTemplateText}
-                        outputMode="text"
-                        minHeight={180}
-                        disabled={jobState.status === "running" || Boolean(jobId)}
-                      />
-                    </label>
+          <aside className="space-y-8">
+            <section className="rounded-3xl border border-slate-200 bg-white p-8">
+              <h3 className="font-bold text-slate-900">Live Preview</h3>
+              <div className="mt-6 rounded-2xl bg-slate-100 p-4 shadow-inner">
+                <div className="rounded-xl bg-white p-4 text-sm shadow-sm">
+                  <div dangerouslySetInnerHTML={{ __html: renderTemplatePreviewHtml(previewMessage) }} />
+                </div>
+              </div>
+            </section>
 
-                    <label className="grid gap-1 text-xs text-zinc-600">
-                      Link (optional)
-                      <input
-                        className="w-full rounded border p-2 text-sm"
-                        value={templateLink}
-                        onChange={(e) => setTemplateLink(e.target.value)}
-                        placeholder="https://..."
-                        disabled={jobState.status === "running" || Boolean(jobId)}
-                      />
-                    </label>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleBulkSend}
-                        disabled={
-                          draftLoading ||
-                          !recipients.length ||
-                          !waConnected ||
-                          jobState.status === "running" ||
-                          jobState.status === "waiting"
-                        }
-                        className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-                      >
-                        Bulk Send (30s, 3 min break/10)
-                      </button>
-                    </div>
-
-                    {jobState.status ? (
-                      <div className="rounded border bg-white p-3">
-                        <p className="text-sm font-semibold text-zinc-800">
-                          Job: {jobId ? String(jobId).slice(-8) : "-"} • {jobState.status}
-                        </p>
-                        <p className="mt-1 text-sm text-zinc-600">
-                          Sent {jobState.sentCount}/{jobState.total} • Remaining{" "}
-                          {Math.max(0, jobState.total - jobState.sentCount)}
-                        </p>
-                        {jobState.nextRunAt ? (
-                          <p className="mt-1 text-xs text-zinc-500">
-                            Next run: {new Date(jobState.nextRunAt).toLocaleString()}
-                          </p>
-                        ) : null}
-                        {jobState.lastError ? (
-                          <p className="mt-2 rounded bg-red-50 p-2 text-sm text-red-700">{jobState.lastError}</p>
-                        ) : null}
-                        {jobState.lastWaLink ? (
-                          <a
-                            className="mt-2 inline-block rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 underline"
-                            href={jobState.lastWaLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Last WA link
-                          </a>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {sendLogs.length ? (
-                      <div className="rounded border bg-white p-3">
-                        <p className="text-sm font-semibold text-zinc-800">Send log</p>
-                        <div className="mt-2 max-h-64 overflow-auto">
-                          <table className="w-full border-collapse text-xs">
-                            <thead>
-                              <tr className="bg-zinc-100 text-left">
-                                <th className="border p-2">#</th>
-                                <th className="border p-2">Name</th>
-                                <th className="border p-2">Phone</th>
-                                <th className="border p-2">Status</th>
-                                <th className="border p-2">Detail</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sendLogs
-                                .slice(-50)
-                                .map((log, idx) => (
-                                  <tr key={`${log.index}-${idx}`} className="align-top">
-                                    <td className="border p-2">{log.index}</td>
-                                    <td className="border p-2">{log.name || "-"}</td>
-                                    <td className="border p-2">{log.phone}</td>
-                                    <td className="border p-2">{log.status}</td>
-                                    <td className="border p-2">
-                                      {log.status === "failed" ? (
-                                        <span className="text-red-600">{log.error || "-"}</span>
-                                      ) : log.waLink ? (
-                                        <a
-                                          className="text-emerald-700 underline"
-                                          href={log.waLink}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                        >
-                                          link
-                                        </a>
-                                      ) : (
-                                        "-"
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
+            {jobState.status && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-8">
+                <h3 className="font-bold text-slate-900">Job Status</h3>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-500 uppercase tracking-tight">Status</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${jobState.status === "running" ? "bg-indigo-50 text-indigo-600" : "bg-emerald-50 text-emerald-600"}`}>{jobState.status}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${(jobState.sentCount / jobState.total) * 100}%` }} className="h-full bg-indigo-600" />
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-slate-900">
+                    <span>{jobState.sentCount} Sent</span>
+                    <span>{jobState.total} Total</span>
                   </div>
                 </div>
-              </div>
+              </section>
+            )}
 
-              <div className="rounded border p-4">
-                <h2 className="text-sm font-semibold text-zinc-700">Preview</h2>
-                <p className="mt-1 text-xs text-zinc-500">First recipient</p>
-                <div
-                  className="mt-3 rounded border bg-white p-3 text-sm"
-                  dangerouslySetInnerHTML={{ __html: previewMessageHtml || "-" }}
-                />
-                <div className="mt-4 rounded border bg-zinc-50 p-3">
-                  <p className="text-xs font-semibold text-zinc-700">Note</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    This repo currently has no WhatsApp Business API integration. It generates WA deep-links and
-                    increments usage as if queued/sent.
-                  </p>
+            {sendLogs.length > 0 && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-6">
+                <h3 className="font-bold text-slate-900">Send History</h3>
+                <div className="mt-4 max-h-60 overflow-auto space-y-2">
+                  {sendLogs.slice(-20).reverse().map((log, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-[10px]">
+                      <div>
+                        <p className="font-bold text-slate-900">{log.name}</p>
+                        <p className="text-slate-500">{log.phone}</p>
+                      </div>
+                      <span className={`font-bold ${log.status === "sent" ? "text-emerald-600" : "text-rose-600"}`}>{log.status}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </div>
-          ) : activeTab === "bulk" ? (
-            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <div className="rounded border p-4">
-                <h2 className="mb-1 text-sm font-semibold text-zinc-700">Upload recipients Excel</h2>
-                <p className="text-sm text-zinc-500">
-                  Excel headers should be <b>Name</b> and <b>Phone</b>.
-                </p>
-
-                <div className="mt-4 rounded border bg-zinc-50 p-4">
-                  <label className="grid gap-2 text-sm text-zinc-700">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                      Choose file
-                    </span>
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      disabled={excelUploading}
-                      onChange={(e) => handleExcelUploadFile(e.target.files?.[0] || null)}
-                    />
-                  </label>
-
-                  {excelUploading ? (
-                    <p className="mt-3 text-sm text-zinc-500">Processing Excel...</p>
-                  ) : (
-                    <p className="mt-3 text-xs text-zinc-500">
-                      Tip: use `Export to Excel (Name+Phone)` from Leads first.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded border p-4">
-                <h2 className="mb-3 text-sm font-semibold text-zinc-700">Manual WP usage add (debug)</h2>
-                <form onSubmit={handleAddPromotion} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <label className="flex-1">
-                    <span className="mb-1 block text-xs text-zinc-500">Count</span>
-                    <input
-                      className="w-full rounded border p-2"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={count}
-                      onChange={(event) => setCount(event.target.value)}
-                      required
-                    />
-                  </label>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="rounded bg-zinc-900 px-4 py-2 text-white transition hover:opacity-90 disabled:opacity-60"
-                  >
-                    {submitting ? "Submitting..." : "Add"}
-                  </button>
-                </form>
-
-                {submitError && <p className="mt-3 rounded bg-red-50 p-2 text-sm text-red-700">{submitError}</p>}
-                {submitSuccess && (
-                  <p className="mt-3 rounded bg-emerald-50 p-2 text-sm font-medium text-emerald-700">
-                    {submitSuccess}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : null}
+              </section>
+            )}
+          </aside>
         </div>
       )}
-    </CustomerDashboardShell>
+    </div>
   );
 }
 
 export default function DashboardWpPromotionsPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-zinc-50 p-6">
-          <p className="text-sm text-zinc-500">Loading…</p>
-        </main>
-      }
-    >
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" /></div>}>
       <WpPromotionsPageContent />
     </Suspense>
   );

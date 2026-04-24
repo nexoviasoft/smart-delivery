@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
-import CustomerDashboardShell from "@/components/customer-dashboard-shell";
 import { getCustomerHeaders } from "@/components/customer-api";
+import { motion, AnimatePresence } from "framer-motion";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,99 +30,54 @@ export default function LeadsPageClient() {
 
   useEffect(() => {
     fetch("/api/campaigns", { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load campaigns");
-          setLoadingCampaigns(false);
-          return;
-        }
-
+      .then((r) => r.json())
+      .then((json) => {
         const items = Array.isArray(json?.data) ? json.data : [];
         setCampaigns(items);
-        if (!selectedCampaignId && items.length) {
-          setSelectedCampaignId(String(items[0]._id));
-        }
-        setLoadingCampaigns(false);
+        if (!selectedCampaignId && items.length) setSelectedCampaignId(String(items[0]._id));
       })
-      .catch(() => {
-        setError("Failed to load campaigns");
-        setLoadingCampaigns(false);
-      });
+      .catch(() => setError("Failed to load campaigns"))
+      .finally(() => setLoadingCampaigns(false));
   }, []);
 
   useEffect(() => {
-    if (!selectedCampaignId) {
-      // Avoid calling setState synchronously within an effect.
-      queueMicrotask(() => {
-        setLeads([]);
-        setCount(0);
-        setSelectedLeadIds([]);
-      });
-      return;
-    }
+    if (!selectedCampaignId) return;
+    setLoadingLeads(true);
+    setError("");
+    setSelectedLeadIds([]);
 
-    // Avoid calling setState synchronously within an effect.
-    queueMicrotask(() => {
-      setLoadingLeads(true);
-      setError("");
-      setSelectedLeadIds([]);
-    });
     fetch(`/api/campaigns/${selectedCampaignId}/leads`, { headers: getCustomerHeaders() })
-      .then((response) => response.json().then((json) => ({ response, json })))
-      .then(({ response, json }) => {
-        if (!response.ok) {
-          setError(json?.error || "Failed to load leads");
-          setLoadingLeads(false);
-          return;
-        }
+      .then((r) => r.json())
+      .then((json) => {
         setLeads(Array.isArray(json?.data?.leads) ? json.data.leads : []);
         setCount(Number(json?.data?.count || 0));
-        setLoadingLeads(false);
       })
-      .catch(() => {
-        setError("Failed to load leads");
-        setLoadingLeads(false);
-      });
+      .catch(() => setError("Failed to load leads"))
+      .finally(() => setLoadingLeads(false));
   }, [selectedCampaignId]);
 
   function toggleLeadSelection(leadId) {
     const id = String(leadId);
-    setSelectedLeadIds((prev) => {
-      const exists = prev.some((x) => String(x) === id);
-      if (exists) return prev.filter((x) => String(x) !== id);
-      return [...prev, leadId];
-    });
+    setSelectedLeadIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   }
 
   function toggleSelectAllLeads() {
-    if (!leads.length) return;
-    if (allSelected) {
-      setSelectedLeadIds([]);
-      return;
-    }
-    setSelectedLeadIds(leads.map((lead) => lead._id));
+    if (allSelected) setSelectedLeadIds([]);
+    else setSelectedLeadIds(allLeadIds);
   }
 
   function normalizeKey(value) {
-    return String(value || "")
-      .trim()
-      .replace(/\s+/g, " ")
-      .slice(0, 80);
+    return String(value || "").trim().replace(/\s+/g, " ").slice(0, 80);
   }
 
   function findAnswerByField(answers, field) {
     if (!answers || !field) return "";
     const baseKey = normalizeKey(field.label) || String(field.key || "");
     if (!baseKey) return "";
-
     if (Object.prototype.hasOwnProperty.call(answers, baseKey)) return answers[baseKey];
-
     const keys = Object.keys(answers);
     const matchedKey = keys.find((k) => k === baseKey || k.startsWith(baseKey));
-    if (matchedKey) return answers[matchedKey];
-
-    return "";
+    return matchedKey ? answers[matchedKey] : "";
   }
 
   function sanitizePhoneDigits(value) {
@@ -130,280 +85,186 @@ export default function LeadsPageClient() {
   }
 
   function normalizeEmail(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase();
+    return String(value || "").trim().toLowerCase();
   }
 
-  function handleExportToExcel() {
+  function handleExport(type) {
     setError("");
+    if (!selectedCampaignId) return setError("Select a campaign first.");
 
-    if (!selectedCampaignId) {
-      setError("Please select a campaign first.");
-      return;
+    const leadSource = selectedLeadIds.length ? leads.filter((l) => selectedLeadSet.has(String(l._id))) : leads;
+    
+    if (type === "phone") {
+      const phoneField = (selectedCampaign?.fields || []).find((f) => f.type === "phone");
+      const nameField = (selectedCampaign?.fields || []).find((f) => f.type === "text" && /name/i.test(f.label || f.key)) || (selectedCampaign?.fields || []).find((f) => f.type === "text");
+      if (!phoneField || !nameField) return setError("Campaign lacks name/phone fields.");
+      
+      const data = leadSource.map(l => ({ Name: findAnswerByField(l.answers, nameField), Phone: sanitizePhoneDigits(findAnswerByField(l.answers, phoneField)) })).filter(d => d.Phone);
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      XLSX.writeFile(wb, "wp-recipients.xlsx");
+    } else {
+      const emailField = (selectedCampaign?.fields || []).find((f) => f.type === "email");
+      const nameField = (selectedCampaign?.fields || []).find((f) => f.type === "text" && /name/i.test(f.label || f.key)) || (selectedCampaign?.fields || []).find((f) => f.type === "text");
+      if (!emailField || !nameField) return setError("Campaign lacks name/email fields.");
+
+      const data = leadSource.map(l => ({ Name: findAnswerByField(l.answers, nameField), Email: normalizeEmail(findAnswerByField(l.answers, emailField)) })).filter(d => EMAIL_RE.test(d.Email));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      XLSX.writeFile(wb, "email-recipients.xlsx");
     }
-
-    const phoneField = (selectedCampaign?.fields || []).find((f) => f.type === "phone") || null;
-    const nameField =
-      (selectedCampaign?.fields || []).find((f) => f.type === "text" && /name/i.test(String(f.label || f.key || ""))) ||
-      (selectedCampaign?.fields || []).find((f) => f.type === "text") ||
-      null;
-
-    if (!phoneField || !nameField) {
-      setError("Phone and Name fields must exist in the selected campaign.");
-      return;
-    }
-
-    const leadSource = selectedLeadIds.length
-      ? leads.filter((l) => selectedLeadSet.has(String(l._id)))
-      : leads;
-
-    const recipients = leadSource
-      .map((lead) => {
-        const phone = sanitizePhoneDigits(findAnswerByField(lead.answers || lead?.answers, phoneField));
-        const name = String(findAnswerByField(lead.answers || lead?.answers, nameField) || "").trim().slice(0, 120);
-        if (!phone) return null;
-        return { Name: name, Phone: phone };
-      })
-      .filter(Boolean);
-
-    if (!recipients.length) {
-      setError("No valid recipients (phone missing).");
-      return;
-    }
-
-    const worksheet = XLSX.utils.json_to_sheet(recipients, { header: ["Name", "Phone"] });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Recipients");
-    XLSX.writeFile(workbook, "wp-recipients.xlsx");
   }
 
-  function handleExportEmailExcel() {
-    setError("");
-
-    if (!selectedCampaignId) {
-      setError("Please select a campaign first.");
-      return;
-    }
-
-    const emailField = (selectedCampaign?.fields || []).find((f) => f.type === "email") || null;
-    const nameField =
-      (selectedCampaign?.fields || []).find((f) => f.type === "text" && /name/i.test(String(f.label || f.key || ""))) ||
-      (selectedCampaign?.fields || []).find((f) => f.type === "text") ||
-      null;
-
-    if (!emailField || !nameField) {
-      setError("Email and Name fields must exist in the selected campaign.");
-      return;
-    }
-
-    const leadSource = selectedLeadIds.length
-      ? leads.filter((l) => selectedLeadSet.has(String(l._id)))
-      : leads;
-
-    const recipients = leadSource
-      .map((lead) => {
-        const email = normalizeEmail(findAnswerByField(lead.answers || lead?.answers, emailField));
-        const name = String(findAnswerByField(lead.answers || lead?.answers, nameField) || "").trim().slice(0, 120);
-        if (!email || !EMAIL_RE.test(email)) return null;
-        return { Name: name, Email: email };
-      })
-      .filter(Boolean);
-
-    if (!recipients.length) {
-      setError("No valid recipients (email missing or invalid).");
-      return;
-    }
-
-    const worksheet = XLSX.utils.json_to_sheet(recipients, { header: ["Name", "Email"] });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Recipients");
-    XLSX.writeFile(workbook, "email-recipients.xlsx");
-  }
-
-  async function handleSendToEmailPromotions() {
-    setError("");
-
-    if (!selectedCampaignId) {
-      setError("Please select a campaign first.");
-      return;
-    }
-
-    if (!selectedLeadIds.length) {
-      setError("Select at least one lead first.");
-      return;
-    }
-
-    const leadIds = selectedLeadIds;
-
+  async function handleSendToPromotions() {
+    if (!selectedLeadIds.length) return setError("Select leads first.");
     setEmailSending(true);
     try {
-      const response = await fetch("/api/email-promotions/draft", {
+      const res = await fetch("/api/email-promotions/draft", {
         method: "POST",
         headers: getCustomerHeaders(),
-        body: JSON.stringify({
-          campaignId: selectedCampaignId,
-          leadIds,
-        }),
+        body: JSON.stringify({ campaignId: selectedCampaignId, leadIds: selectedLeadIds }),
       });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(json?.error || "Failed to create email draft");
-        return;
-      }
-      const draftId = json?.data?.draftId;
-      if (!draftId) {
-        setError("draftId missing from response");
-        return;
-      }
-      router.push(`/dashboard/email-promotions?draftId=${draftId}`);
-    } catch {
-      setError("Failed to create email draft");
-    } finally {
-      setEmailSending(false);
-    }
+      const json = await res.json();
+      if (json.data?.draftId) router.push(`/dashboard/email-promotions?draftId=${json.data.draftId}`);
+      else throw new Error(json.error || "Failed to create draft");
+    } catch (err) { setError(err.message); } finally { setEmailSending(false); }
   }
 
   const columns = useMemo(() => {
-    const allKeys = new Set();
+    const keys = new Set();
     const ordered = [];
-
-    (selectedCampaign?.fields || []).forEach((field) => {
-      const key = String(field?.label || "").trim() || String(field?.key || "").trim();
-      if (key && !allKeys.has(key)) {
-        allKeys.add(key);
-        ordered.push(key);
-      }
+    (selectedCampaign?.fields || []).forEach(f => {
+      const k = String(f.label || f.key).trim();
+      if (k && !keys.has(k)) { keys.add(k); ordered.push(k); }
     });
-
-    leads.forEach((lead) => {
-      Object.keys(lead?.answers || {}).forEach((key) => {
-        if (!allKeys.has(key)) {
-          allKeys.add(key);
-          ordered.push(key);
-        }
+    leads.forEach(l => {
+      Object.keys(l.answers || {}).forEach(k => {
+        if (!keys.has(k)) { keys.add(k); ordered.push(k); }
       });
     });
     return ordered;
   }, [leads, selectedCampaign]);
 
   return (
-    <CustomerDashboardShell title="Leads">
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-
-      <div className="rounded border p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-zinc-600">Campaign Tabs</label>
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-            {!campaigns.length ? (
-              <button
-                type="button"
-                disabled
-                className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-sm text-zinc-500"
-              >
-                No campaigns
-              </button>
-            ) : (
-              campaigns.map((campaign) => {
-                const isActive = String(selectedCampaignId) === String(campaign._id);
-                return (
-                  <button
-                    key={campaign._id}
-                    type="button"
-                    onClick={() => setSelectedCampaignId(String(campaign._id))}
-                    disabled={loadingCampaigns}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
-                      isActive
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-                    }`}
-                  >
-                    {campaign.name}
-                  </button>
-                );
-              })
-            )}
-          </div>
-          <span className="text-sm text-zinc-500">Total leads: {count}</span>
-          <span className="text-sm text-zinc-500">Selected: {selectedLeadIds.length}</span>
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Leads</h1>
+          <p className="mt-2 text-slate-500">Manage and export captured leads from your campaigns.</p>
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExportToExcel}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-          >
-            Export to Excel (Name+Phone)
-          </button>
-          <button
-            type="button"
-            onClick={handleExportEmailExcel}
-            className="rounded border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 disabled:opacity-60"
-          >
-            Export to Excel (Name+Email)
-          </button>
-          <button
-            type="button"
-            onClick={handleSendToEmailPromotions}
-            disabled={emailSending || loadingLeads}
-            className="rounded bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-          >
-            {emailSending ? "Opening…" : "Send to Email Promotions"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded border p-4">
-        {loadingLeads ? (
-          <p className="text-sm text-zinc-500">Loading leads...</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-100 text-left">
-                  <th className="border p-2 w-16">
-                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
-                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAllLeads} disabled={!leads.length} />
-                      All
-                    </label>
-                  </th>
-                  <th className="border p-2">Submitted At</th>
-                  {columns.map((column) => (
-                    <th key={column} className="border p-2">
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead._id}>
-                    <td className="border p-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedLeadSet.has(String(lead._id))}
-                        onChange={() => toggleLeadSelection(lead._id)}
-                      />
-                    </td>
-                    <td className="border p-2">
-                      {lead?.submittedAt ? new Date(lead.submittedAt).toLocaleString() : "-"}
-                    </td>
-                    {columns.map((column) => {
-                      const value = lead?.answers?.[column];
-                      return (
-                        <td key={column} className="border p-2">
-                          {Array.isArray(value) ? value.join(", ") : value || "-"}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex items-center gap-4 rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
+            <span className="text-xl font-bold text-slate-900">{count}</span>
           </div>
+          <div className="h-8 w-px bg-slate-100" />
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Selected</span>
+            <span className="text-xl font-bold text-indigo-600">{selectedLeadIds.length}</span>
+          </div>
+        </div>
+      </header>
+
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700 ring-1 ring-rose-200"
+          >
+            {error}
+          </motion.div>
         )}
-      </div>
-    </CustomerDashboardShell>
+      </AnimatePresence>
+
+      <section className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-6 border-b border-slate-200 pb-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {campaigns.map((c) => (
+              <button
+                key={c._id}
+                onClick={() => setSelectedCampaignId(String(c._id))}
+                className={`relative whitespace-nowrap px-4 py-2 text-sm font-bold transition-all ${
+                  selectedCampaignId === String(c._id) ? "text-indigo-600" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {c.name}
+                {selectedCampaignId === String(c._id) && (
+                  <motion.div layoutId="campaignTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => handleExport("phone")} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export Phone</button>
+            <button onClick={() => handleExport("email")} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Export Email</button>
+            <button 
+              onClick={handleSendToPromotions} disabled={emailSending}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              {emailSending ? "Opening..." : "Send to Promotions"}
+            </button>
+          </div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={selectedCampaignId}
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+            className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50">
+                    <th className="px-6 py-4">
+                      <input 
+                        type="checkbox" checked={allSelected} onChange={toggleSelectAllLeads} 
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600/20"
+                      />
+                    </th>
+                    <th className="px-6 py-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">Submitted At</th>
+                    {columns.map((c) => (
+                      <th key={c} className="px-6 py-4 font-bold text-slate-500 uppercase tracking-wider text-[10px]">{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {loadingLeads ? (
+                    <tr><td colSpan={columns.length + 2} className="px-6 py-12 text-center text-slate-400">Loading leads...</td></tr>
+                  ) : leads.length === 0 ? (
+                    <tr><td colSpan={columns.length + 2} className="px-6 py-12 text-center text-slate-400">No leads found for this campaign.</td></tr>
+                  ) : (
+                    leads.map((l) => (
+                      <tr key={l._id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <input 
+                            type="checkbox" checked={selectedLeadSet.has(String(l._id))} onChange={() => toggleLeadSelection(l._id)}
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600/20"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">
+                          {l.submittedAt ? new Date(l.submittedAt).toLocaleString() : "-"}
+                        </td>
+                        {columns.map((c) => {
+                          const val = l.answers?.[c];
+                          return (
+                            <td key={c} className="px-6 py-4 text-slate-900 font-semibold">
+                              {Array.isArray(val) ? val.join(", ") : val || "-"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </section>
+    </div>
   );
 }
