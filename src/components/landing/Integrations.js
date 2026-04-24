@@ -2,14 +2,15 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import { Mail, Smartphone, Truck, Rocket } from "lucide-react";
 import { CheckIcon } from "./Icons";
 
 const Integrations = () => {
   const integrations = [
-    { name: "Steadfast Courier", desc: "Native API integration for seamless delivery processing.", icon: "🚛" },
-    { name: "Email Automation", desc: "Advanced campaign management and customer follow-ups.", icon: "✉️" },
-    { name: "WhatsApp", desc: "Automated customer updates and marketing via WhatsApp.", icon: "📱" },
-    { name: "Ad Campaigns", desc: "Collect leads directly from Facebook, Instagram, and Google Ads.", icon: "🚀" }
+    { name: "Steadfast Courier", desc: "Native API integration for seamless delivery processing.", icon: Truck },
+    { name: "Email Automation", desc: "Advanced campaign management and customer follow-ups.", icon: Mail },
+    { name: "WhatsApp", desc: "Automated customer updates and marketing via WhatsApp.", icon: Smartphone },
+    { name: "Ad Campaigns", desc: "Collect leads directly from Facebook, Instagram, and Google Ads.", icon: Rocket }
   ];
 
   return (
@@ -18,7 +19,9 @@ const Integrations = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div className="order-2 lg:order-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {integrations.map((int, index) => (
+              {integrations.map((int, index) => {
+                const Icon = int.icon;
+                return (
                 <motion.div 
                   key={int.name} 
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -27,11 +30,14 @@ const Integrations = () => {
                   transition={{ duration: 0.5, delay: index * 0.1 }}
                   className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-indigo-100 transition-all hover:shadow-lg"
                 >
-                  <div className="text-3xl mb-4">{int.icon}</div>
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                    <Icon className="h-5 w-5" />
+                  </div>
                   <h4 className="font-bold text-slate-900 mb-1">{int.name}</h4>
                   <p className="text-xs text-slate-500">{int.desc}</p>
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="order-1 lg:order-2">

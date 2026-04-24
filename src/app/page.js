@@ -119,7 +119,7 @@ export default function Home() {
           <Features />
         </ScrollReveal>
         <ScrollReveal direction="left" delay={0.2}>
-          {/* <HowItWorks /> */}
+          <HowItWorks />
         </ScrollReveal>
         <ScrollReveal direction="right" delay={0.2}>
           <Integrations />

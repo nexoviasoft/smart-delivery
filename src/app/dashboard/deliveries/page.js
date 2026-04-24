@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getCustomerHeaders } from "@/components/customer-api";
 import DataTable from "@/components/dashboard/DataTable";
 import { motion, AnimatePresence } from "framer-motion";
+import { Check } from "lucide-react";
 
 export default function DashboardDeliveriesPage() {
   const [deliveries, setDeliveries] = useState([]);
@@ -270,7 +271,7 @@ export default function DashboardDeliveriesPage() {
                     selectedCourierType === item.courierType ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
                   }`}>
                     {selectedCourierType === item.courierType && (
-                      <svg className="h-full w-full text-white p-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" /></svg>
+                      <Check className="h-full w-full p-0.5 text-white" strokeWidth={3} />
                     )}
                   </div>
                 </button>

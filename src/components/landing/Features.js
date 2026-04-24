@@ -2,53 +2,65 @@
 
 import React from "react";
 import { motion } from "framer-motion";
+import {
+  BarChart3,
+  Box,
+  Mail,
+  MapPin,
+  MessageCircle,
+  RefreshCw,
+  Rocket,
+  Sprout,
+  Target,
+  Truck,
+} from "lucide-react";
 
 const Features = () => {
   const features = [
     {
       title: "Campaign Lead Collection",
       desc: "Create high-converting landing pages and collect leads directly into your dashboard.",
-      icon: "🎯"
+      icon: Target
     },
     {
       title: "Courier Automation",
       desc: "Automatically sync orders with Steadfast Courier and other major providers.",
-      icon: "🚚"
+      icon: Truck
     },
     {
       title: "Bulk Order Management",
       desc: "Process hundreds of orders in seconds with our powerful bulk action tools.",
-      icon: "📦"
+      icon: Box
     },
     {
       title: "Email Automation",
       desc: "Send personalized follow-ups and marketing campaigns to boost retention.",
-      icon: "📧"
+      icon: Mail
     },
     {
       title: "WhatsApp Automation",
       desc: "Automate your WhatsApp marketing with our native plugin.",
-      icon: "📱"
+      icon: MessageCircle
     },
     {
       title: "Real-time Tracking",
       desc: "Keep your customers updated with live delivery status notifications.",
-      icon: "📍"
+      icon: MapPin
     },
     {
       title: "Advanced Analytics",
       desc: "Get deep insights into your delivery performance and growth metrics.",
-      icon: "📊"
+      icon: BarChart3
     },
     {
       title: "Smart Retargeting",
       desc: "Automatically re-engage customers who haven't purchased in a while.",
-      icon: "🔄"
+      icon: RefreshCw
     },
     {
       title: "Lead Nurturing",
       desc: "Build lasting relationships with automated drip sequences across all channels.",
-      icon: "🌱"
+      icon: Sprout
     }
   ];
 
@@ -99,17 +111,22 @@ const Features = () => {
           whileInView="visible"
           viewport={{ once: true, margin: "-100px" }}
         >
-          {features.map((feature) => (
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
             <motion.div 
               key={feature.title} 
               variants={itemVariants}
               className="group relative rounded-3xl border border-slate-100 p-8 transition-all hover:border-indigo-100 hover:bg-slate-50"
             >
-              <div className="mb-4 text-4xl">{feature.icon}</div>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+                <Icon className="h-6 w-6" />
+              </div>
               <h3 className="text-xl font-bold text-slate-900">{feature.title}</h3>
               <p className="mt-2 text-slate-600 leading-relaxed">{feature.desc}</p>
             </motion.div>
-          ))}
+            );
+          })}
         </motion.div>
       </div>
     </section>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { Box, LogOut, ShoppingBag, WalletCards } from "lucide-react";
 
 const SUPER_ADMIN_TOKEN = "hardcoded-super-admin-token";
 
@@ -45,11 +46,12 @@ export default function SuperAdminShell({ title, children }) {
 
           <nav className="mt-10 grid gap-1">
             {[
-              { name: "Packages", href: "/super-admin/packages", icon: "📦" },
-              { name: "Subscriptions", href: "/super-admin/subscriptions", icon: "💳" },
-              { name: "Orders", href: "/super-admin/orders", icon: "🛍️" },
+              { name: "Packages", href: "/super-admin/packages", icon: Box },
+              { name: "Subscriptions", href: "/super-admin/subscriptions", icon: WalletCards },
+              { name: "Orders", href: "/super-admin/orders", icon: ShoppingBag },
             ].map((item) => {
               const active = pathname === item.href;
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
@@ -60,7 +62,7 @@ export default function SuperAdminShell({ title, children }) {
                       : "text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <span className="text-lg">{item.icon}</span>
+                  <Icon className="h-5 w-5" />
                   {item.name}
                 </Link>
               );
@@ -73,7 +75,7 @@ export default function SuperAdminShell({ title, children }) {
               onClick={handleLogout}
               type="button"
             >
-              <span>🚪</span>
+              <LogOut className="h-5 w-5" />
               Logout
             </button>
           </div>

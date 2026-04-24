@@ -61,8 +61,64 @@ const HowItWorks = () => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="relative rounded-3xl bg-slate-800 p-2 shadow-2xl ring-1 ring-slate-700"
             >
-              <div className="rounded-2xl bg-slate-900 p-8 h-80 flex items-center justify-center text-slate-500 font-mono italic text-center">
-                [ Dashboard Mockup: Real-time Order Flow ]
+              <div className="relative rounded-2xl bg-slate-900 p-6 h-80 overflow-hidden flex flex-col gap-4 border border-slate-800">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="h-3 w-3 rounded-full bg-red-500"></div>
+                    <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
+                    <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                  </div>
+                  <div className="h-4 w-24 bg-slate-800 rounded-full"></div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 flex gap-4">
+                  {/* Sidebar */}
+                  <div className="w-16 flex flex-col gap-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="h-8 w-8 rounded-lg bg-slate-800 opacity-50"></div>
+                    ))}
+                  </div>
+
+                  {/* Main Area */}
+                  <div className="flex-1 flex flex-col gap-4">
+                    {/* Stats Row */}
+                    <div className="flex gap-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 flex-1 rounded-xl bg-slate-800/50 p-3 flex flex-col justify-between">
+                          <div className="h-2 w-8 bg-slate-700 rounded-full"></div>
+                          <div className="h-4 w-12 bg-indigo-500/50 rounded-full"></div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Animated Order Rows */}
+                    <div className="flex-1 rounded-xl bg-slate-800/30 p-4 flex flex-col gap-3 relative overflow-hidden">
+                      <div className="h-2 w-16 bg-slate-700 rounded-full mb-2"></div>
+                      
+                      <motion.div
+                        animate={{ y: [0, -40, -40, -80, -80, 0] }}
+                        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                        className="flex flex-col gap-3"
+                      >
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="h-10 w-full rounded-lg bg-slate-800/80 flex items-center px-4 gap-4">
+                            <div className="h-6 w-6 rounded-md bg-indigo-500/20 flex items-center justify-center">
+                              <div className="h-2 w-2 rounded-full bg-indigo-400"></div>
+                            </div>
+                            <div className="flex-1 h-2 bg-slate-700 rounded-full"></div>
+                            <div className="w-16 h-2 bg-slate-600 rounded-full"></div>
+                            <div className="w-10 h-4 rounded-full bg-green-500/20 border border-green-500/30"></div>
+                          </div>
+                        ))}
+                      </motion.div>
+
+                      {/* Gradient fade for bottom */}
+                      <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-900 to-transparent"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>

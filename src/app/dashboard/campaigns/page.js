@@ -7,6 +7,7 @@ import RichTextEditor from "@/components/rich-text-editor";
 import useImgbbUpload from "@/hooks/use-imgbb-upload";
 import DataTable from "@/components/dashboard/DataTable";
 import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 
 const FIELD_TYPES = ["text", "phone", "email", "textarea", "select", "radio", "checkbox"];
 const FONT_OPTIONS = [
@@ -477,9 +478,7 @@ export default function DashboardCampaignsPage() {
                     )}
                     {fields.length > 1 && (
                       <button type="button" onClick={() => removeField(field.id)} className="absolute -right-2 -top-2 rounded-full bg-white p-1 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-rose-500">
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X className="h-4 w-4" />
                       </button>
                     )}
                   </motion.div>

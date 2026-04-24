@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { ArrowUp } from "lucide-react";
 
 export default function StatsCard({ label, value, icon: Icon, trend, color = "indigo" }) {
   const colorMap = {
@@ -26,9 +27,7 @@ export default function StatsCard({ label, value, icon: Icon, trend, color = "in
           {trend && (
             <div className={`mt-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${trend > 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
               {trend > 0 ? "+" : ""}{trend}%
-              <svg className={`h-3 w-3 ${trend < 0 ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
+              <ArrowUp className={`h-3 w-3 ${trend < 0 ? "rotate-180" : ""}`} strokeWidth={3} />
             </div>
           )}
         </div>
