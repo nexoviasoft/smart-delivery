@@ -44,8 +44,8 @@ function getInitState(state) {
 }
 
 async function getPuppeteerConfig() {
-  // If running on Vercel or in production environment
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+  // Use chromium-min only on Vercel
+  if (process.env.VERCEL) {
     try {
       const chromium = (await import("@sparticuz/chromium-min")).default;
       const puppeteer = (await import("puppeteer-core")).default;
@@ -57,15 +57,15 @@ async function getPuppeteerConfig() {
         headless: chromium.headless,
       };
     } catch (e) {
-      console.error("[WA] Failed to load chromium for production:", e.message);
+      console.error("[WA] Failed to load chromium for Vercel:", e.message);
     }
   }
 
-  // Local development fallback
+  // Local development or other production environments (VPS)
   return {
     headless: true,
     executablePath: WA_CHROME_EXECUTABLE_PATH || undefined,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   };
 }
 
