@@ -1,19 +1,17 @@
 import path from "path";
 import qrcode from "qrcode";
-import { Client, LocalAuth } from "whatsapp-web.js";
+import { Client, RemoteAuth } from "whatsapp-web.js";
+import { MongoStore } from "wwebjs-mongo";
+import mongoose from "mongoose";
 import { normalizePhoneDigits } from "@/lib/wp/phone";
+import connectDB from "@/lib/mongodb";
 
 const WA_CLIENT_ID_BASE = process.env.WA_WEB_CLIENT_ID || "default";
-const WA_SESSION_DIR_BASE = process.env.WA_WEB_SESSION_DIR || path.join(process.cwd(), ".wa-session");
 const WA_CHROME_EXECUTABLE_PATH = process.env.WA_CHROME_EXECUTABLE_PATH || "";
 
 function getClientKey(rawKey) {
   const key = String(rawKey || "default").trim();
   return key || "default";
-}
-
-function getSessionPathForKey(clientKey) {
-  return path.join(WA_SESSION_DIR_BASE, clientKey);
 }
 
 const clients = new Map();
@@ -45,6 +43,32 @@ function getInitState(state) {
   };
 }
 
+async function getPuppeteerConfig() {
+  // If running on Vercel or in production environment
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+    try {
+      const chromium = (await import("@sparticuz/chromium-min")).default;
+      const puppeteer = (await import("puppeteer-core")).default;
+      
+      return {
+        args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath("https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"),
+        headless: chromium.headless,
+      };
+    } catch (e) {
+      console.error("[WA] Failed to load chromium for production:", e.message);
+    }
+  }
+
+  // Local development fallback
+  return {
+    headless: true,
+    executablePath: WA_CHROME_EXECUTABLE_PATH || undefined,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  };
+}
+
 export async function ensureWaClient(rawKey) {
   const { clientKey, state } = getOrCreateState(rawKey);
   if (state.client) return;
@@ -62,26 +86,29 @@ export async function ensureWaClient(rawKey) {
     });
     state.readyPromise.catch(() => {});
 
-    console.log(`[WA] Initializing client for key: ${clientKey}`);
-    const auth = new LocalAuth({
+    console.log(`[WA] Initializing RemoteAuth client for key: ${clientKey}`);
+    
+    await connectDB();
+    const store = new MongoStore({ mongoose: mongoose });
+    
+    const auth = new RemoteAuth({
       clientId: `${WA_CLIENT_ID_BASE}-${clientKey}`,
-      dataPath: getSessionPathForKey(clientKey),
+      store: store,
+      backupSyncIntervalMs: 300000,
     });
 
+    const puppeteerOptions = await getPuppeteerConfig();
+    
     const client = new Client({
       authStrategy: auth,
-      puppeteer: {
-        headless: true,
-        executablePath: WA_CHROME_EXECUTABLE_PATH || undefined,
-        args: ["--no-sandbox"],
-      },
+      puppeteer: puppeteerOptions,
       webVersionCache: {
         type: "remote",
         remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-js/main/dist/wppconnect-wa.js",
       },
     });
 
-    console.log(`[WA] Creating Client instance...`);
+    console.log(`[WA] Creating Client instance with RemoteAuth...`);
     state.client = client;
 
     client.on("qr", async (qr) => {
@@ -91,8 +118,6 @@ export async function ensureWaClient(rawKey) {
         state.lastQrAt = new Date();
       } catch (e) {
         console.error(`[WA] QR processing error:`, e);
-        state.lastQrDataUrl = "";
-        state.lastQrAt = new Date();
         state.lastError = e?.message || "Failed to generate QR";
       }
     });
@@ -105,6 +130,10 @@ export async function ensureWaClient(rawKey) {
       state.resolveReady?.();
     });
 
+    client.on("remote_session_saved", () => {
+      console.log(`[WA] Remote session saved for ${clientKey}`);
+    });
+
     client.on("auth_failure", (msg) => {
       state.connected = false;
       state.lastError = `auth_failure: ${msg || "unknown"}`;
@@ -112,30 +141,22 @@ export async function ensureWaClient(rawKey) {
     });
 
     client.on("disconnected", (reason) => {
+      console.log(`[WA] Client disconnected: ${reason}`);
       state.connected = false;
       state.lastError = `disconnected: ${reason || "unknown"}`;
       state.lastQrDataUrl = "";
       state.lastQrAt = null;
-      state.readyPromise = new Promise((resolve, reject) => {
-        state.resolveReady = resolve;
-        state.rejectReady = reject;
-      });
-      state.readyPromise.catch(() => {});
+      state.client = null;
+      state.initPromise = null;
     });
 
-    client.on("change_state", () => {});
-
-    console.log(`[WA] Calling client.initialize()...`);
     client.initialize().catch((e) => {
       const msg = e?.message || "WhatsApp initialization failed";
       console.error(`[WA] Initialization catch error for ${clientKey}:`, msg);
       state.connected = false;
       state.lastError = msg;
-
-      // Reset state so we can try again on next call
       state.client = null;
       state.initPromise = null;
-
       state.rejectReady?.(new Error(state.lastError));
     });
   })();
@@ -166,7 +187,7 @@ export async function sendWhatsAppMessage({ phone, message, clientKey }) {
     try {
       await Promise.race([
         state.readyPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("WhatsApp not connected yet")), 15000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("WhatsApp not connected yet")), 30000)),
       ]);
     } catch (e) {
       return { queued: false, sent: false, error: e?.message || "WhatsApp not connected" };
