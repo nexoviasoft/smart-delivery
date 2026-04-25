@@ -17,6 +17,10 @@ const isVercel = !!(
   (typeof process.cwd === 'function' && (process.cwd().includes('/vercel') || process.cwd().includes('/var/task')))
 );
 
+function getIsVercelRuntime() {
+  return !!(isVercel || process.env.VERCEL || (typeof process.cwd === 'function' && (process.cwd().includes('/vercel') || process.cwd().includes('/var/task'))));
+}
+
 console.log(`[WA] Global check - BROWSERLESS_API_KEY exists: ${!!process.env.BROWSERLESS_API_KEY}`);
 console.log(`[WA] Environment check - isVercel: ${isVercel}`);
 
@@ -56,8 +60,9 @@ function getInitState(state) {
 
 async function getPuppeteerConfig() {
   const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  const isVercelRuntime = getIsVercelRuntime();
 
-  if (isVercel) {
+  if (isVercelRuntime) {
     console.log("[WA] Mode: Vercel Local Chromium (Stable Pack)");
     try {
       const chromium = (await import("@sparticuz/chromium-min")).default;
@@ -149,10 +154,11 @@ export async function ensureWaClient(rawKey) {
     const browserlessKey = process.env.BROWSERLESS_API_KEY;
     
     const fs = await import("fs");
-    let remoteDataPath = isVercel ? "/tmp/.wwebjs_auth" : path.join(process.cwd(), ".wwebjs_auth");
+    const isVercelRuntime = getIsVercelRuntime();
+    let remoteDataPath = isVercelRuntime ? "/tmp/.wwebjs_auth" : path.join(process.cwd(), ".wwebjs_auth");
 
     // Fallback: If not explicitly Vercel but directory is not writable, use /tmp
-    if (!isVercel) {
+    if (!isVercelRuntime) {
       try {
         const testDir = path.join(process.cwd(), ".wwebjs_write_test");
         if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
@@ -163,12 +169,12 @@ export async function ensureWaClient(rawKey) {
       }
     }
     
-    console.log(`[WA] Path check - isVercel: ${isVercel}, remoteDataPath: ${remoteDataPath}, cwd: ${process.cwd()}`);
+    console.log(`[WA] Path check - isVercelRuntime: ${isVercelRuntime}, remoteDataPath: ${remoteDataPath}, cwd: ${process.cwd()}`);
     const clientId = `${WA_CLIENT_ID_BASE}-${clientKey}`;
 
     let auth;
-    if (isVercel) {
-      console.log(`[WA] Using RemoteAuth for Vercel persistence`);
+    if (isVercelRuntime || remoteDataPath.startsWith("/tmp")) {
+      console.log(`[WA] Using RemoteAuth for Vercel/Serverless persistence`);
       await connectDB();
       const store = new MongoStore({ mongoose: mongoose });
       auth = new RemoteAuth({
