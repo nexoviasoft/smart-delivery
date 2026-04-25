@@ -9,7 +9,15 @@ import connectDB from "@/lib/mongodb";
 const WA_CLIENT_ID_BASE = process.env.WA_WEB_CLIENT_ID || "default";
 const WA_CHROME_EXECUTABLE_PATH = process.env.WA_CHROME_EXECUTABLE_PATH || "";
 
+const isVercel = !!(
+  process.env.VERCEL === "1" ||
+  process.env.VERCEL ||
+  process.env.NOW_BUILDER ||
+  (typeof process.cwd === 'function' && process.cwd().includes('/vercel'))
+);
+
 console.log(`[WA] Global check - BROWSERLESS_API_KEY exists: ${!!process.env.BROWSERLESS_API_KEY}`);
+console.log(`[WA] Environment check - isVercel: ${isVercel}`);
 
 function getClientKey(rawKey) {
   const key = String(rawKey || "default").trim();
@@ -47,7 +55,6 @@ function getInitState(state) {
 
 async function getPuppeteerConfig() {
   const browserlessKey = process.env.BROWSERLESS_API_KEY;
-  const isVercel = process.env.VERCEL === "1" || !!process.env.VERCEL;
 
   if (isVercel) {
     console.log("[WA] Mode: Vercel Local Chromium (Stable Pack)");
@@ -139,8 +146,9 @@ export async function ensureWaClient(rawKey) {
     const store = new MongoStore({ mongoose: mongoose });
     
     const browserlessKey = process.env.BROWSERLESS_API_KEY;
-    const isVercel = process.env.VERCEL === "1" || !!process.env.VERCEL;
     const remoteDataPath = isVercel ? "/tmp" : path.join(process.cwd(), ".wwebjs_auth");
+    
+    console.log(`[WA] Path check - isVercel: ${isVercel}, remoteDataPath: ${remoteDataPath}`);
     
     const fs = await import("fs");
     const clientId = `${WA_CLIENT_ID_BASE}-${clientKey}`;
