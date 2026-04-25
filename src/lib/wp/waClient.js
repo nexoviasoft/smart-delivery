@@ -95,6 +95,7 @@ export async function ensureWaClient(rawKey) {
       clientId: `${WA_CLIENT_ID_BASE}-${clientKey}`,
       store: store,
       backupSyncIntervalMs: 300000,
+      dataPath: process.env.VERCEL ? "/tmp/.wwebjs_auth" : undefined
     });
 
     const puppeteerOptions = await getPuppeteerConfig();
