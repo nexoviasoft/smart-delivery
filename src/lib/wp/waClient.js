@@ -9,6 +9,8 @@ import connectDB from "@/lib/mongodb";
 const WA_CLIENT_ID_BASE = process.env.WA_WEB_CLIENT_ID || "default";
 const WA_CHROME_EXECUTABLE_PATH = process.env.WA_CHROME_EXECUTABLE_PATH || "";
 
+console.log(`[WA] Global check - BROWSERLESS_API_KEY exists: ${!!process.env.BROWSERLESS_API_KEY}`);
+
 function getClientKey(rawKey) {
   const key = String(rawKey || "default").trim();
   return key || "default";
@@ -45,17 +47,19 @@ function getInitState(state) {
 
 async function getPuppeteerConfig() {
   const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  console.log(`[WA] Browserless Key present: ${!!browserlessKey}`);
 
   // If Browserless API Key is provided, use it (Best for Vercel)
   if (browserlessKey) {
-    console.log("[WA] Using Browserless.io for remote browser");
+    console.log("[WA] Mode: Remote (Browserless.io)");
     return {
-      browserWSEndpoint: `wss://chrome.browserless.io/puppeteer?token=${browserlessKey}`,
+      browserWSEndpoint: `wss://chrome.browserless.io/?token=${browserlessKey}`,
     };
   }
 
   // Fallback: Use chromium-min only on Vercel if no browserless key
   if (process.env.VERCEL) {
+    console.log("[WA] Mode: Local Chromium-min (Vercel)");
     try {
       const chromium = (await import("@sparticuz/chromium-min")).default;
       const puppeteer = (await import("puppeteer-core")).default;
@@ -71,6 +75,7 @@ async function getPuppeteerConfig() {
     }
   }
 
+  console.log("[WA] Mode: Local Development");
   // Local development fallback
   return {
     headless: true,
