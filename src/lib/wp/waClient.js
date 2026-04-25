@@ -107,7 +107,17 @@ export async function ensureWaClient(rawKey) {
     const store = new MongoStore({ mongoose: mongoose });
     
     const isVercel = process.env.VERCEL === "1" || !!process.env.VERCEL;
+    const isRemote = !!browserlessKey;
     const remoteDataPath = isVercel ? "/tmp" : path.join(process.cwd(), ".wwebjs_auth");
+    
+    // Ensure the directory exists to avoid ENOENT errors
+    if (!isVercel && !isRemote) {
+      const fs = await import("fs");
+      if (!fs.existsSync(remoteDataPath)) {
+        fs.mkdirSync(remoteDataPath, { recursive: true });
+      }
+    }
+
     console.log(`[WA] Environment: ${isVercel ? "Vercel" : "Local/Other"}`);
     console.log(`[WA] Using dataPath: ${remoteDataPath}`);
 
@@ -123,6 +133,7 @@ export async function ensureWaClient(rawKey) {
     const client = new Client({
       authStrategy: auth,
       puppeteer: puppeteerOptions,
+      authTimeoutMs: 60000, // Increase timeout
     });
 
     console.log(`[WA] Creating Client instance with RemoteAuth...`);
