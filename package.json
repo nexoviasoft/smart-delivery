@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@sparticuz/chromium-min": "^131.0.1",
+    "@sparticuz/chromium": "^131.0.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@tinymce/tinymce-react": "^6.3.0",
     "babel-plugin-react-compiler": "^1.0.0",

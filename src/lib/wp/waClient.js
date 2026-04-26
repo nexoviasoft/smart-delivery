@@ -64,9 +64,16 @@ async function getPuppeteerConfig() {
   const isVercelRuntime = getIsVercelRuntime();
 
   if (isVercelRuntime) {
-    console.log("[WA] Mode: Vercel Local Chromium (Stable Pack)");
+    console.log("[WA] Mode: Vercel Local Chromium (Standard Pack)");
     try {
-      const chromium = (await import("@sparticuz/chromium-min")).default;
+      const chromium = (await import("@sparticuz/chromium")).default;
+      
+      // Some versions of @sparticuz/chromium require this for serverless environments
+      if (typeof chromium.setGraphicsMode === 'function') {
+        chromium.setGraphicsMode(false);
+      }
+
+      const execPath = await chromium.executablePath("https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar");
       
       return {
         args: [
@@ -74,13 +81,10 @@ async function getPuppeteerConfig() {
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
-          "--no-first-run",
-          "--no-zygote",
           "--disable-gpu",
         ],
         defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath("https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"),
+        executablePath: execPath,
         headless: chromium.headless,
       };
     } catch (e) {
